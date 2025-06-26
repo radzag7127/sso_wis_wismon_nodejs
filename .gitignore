@@ -5,3 +5,9 @@
 # Ignore Flutter build artifacts and temporary files
 /wismon_keuangan/.dart_tool/
 /wismon_keuangan/build/
+
+/page1login.txt
+/page2home.txt
+/page3wismon.txt
+/usebloc.txt
+
