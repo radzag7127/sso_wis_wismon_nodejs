@@ -2,7 +2,8 @@
     <application
         android:label="wismon_keuangan"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,4 +43,7 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+    <!-- The INTERNET permission is required for development. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

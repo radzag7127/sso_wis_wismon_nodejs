@@ -1,44 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'services/api_service.dart';
-import 'bloc/auth/auth_bloc.dart';
-import 'bloc/auth/auth_event.dart';
-import 'bloc/auth/auth_state.dart';
-import 'bloc/payment/payment_bloc.dart';
-import 'pages/login_page.dart';
-import 'pages/home_page.dart';
-import 'pages/wismon_page.dart';
+import 'core/di/injection_container.dart' as di;
+import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'features/auth/presentation/bloc/auth_event.dart';
+import 'features/auth/presentation/bloc/auth_state.dart';
+import 'features/auth/presentation/pages/login_page.dart';
+import 'features/dashboard/presentation/pages/home_page.dart';
+import 'features/payment/presentation/bloc/payment_bloc.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize dependency injection
+  await di.init();
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // Global RouteObserver for managing route lifecycle events
-  static final RouteObserver<PageRoute> routeObserver =
-      RouteObserver<PageRoute>();
-
   @override
   Widget build(BuildContext context) {
-    final apiService = ApiService();
-
     return MultiBlocProvider(
       providers: [
-        BlocProvider<AuthBloc>(
+        BlocProvider(
           create: (context) =>
-              AuthBloc(apiService: apiService)..add(const CheckAuthStatus()),
+              di.sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
         ),
-        BlocProvider<PaymentBloc>(
-          create: (context) => PaymentBloc(apiService: apiService),
-        ),
+        BlocProvider(create: (context) => di.sl<PaymentBloc>()),
       ],
       child: MaterialApp(
         title: 'Wismon Keuangan',
         debugShowCheckedModeBanner: false,
-        // Add the route observer to enable RouteAware functionality
-        navigatorObservers: [MyApp.routeObserver],
+        navigatorObservers: [di.sl<RouteObserver<PageRoute>>()],
         theme: ThemeData(
           primarySwatch: Colors.blue,
           useMaterial3: true,
@@ -62,76 +57,97 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        // Simplified approach - use direct widget switching
-        home: BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, state) {
-            if (state is AuthInitial || state is AuthLoading) {
-              return const Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Loading...'),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            if (state is AuthAuthenticated) {
-              return const HomePage();
-            }
-
-            if (state is AuthError) {
-              // Return to login with error message
-              return LoginPageWithError(errorMessage: state.message);
-            }
-
-            return const LoginPage();
-          },
-        ),
+        home: const AuthWrapper(),
         routes: {
           '/login': (context) => const LoginPage(),
-          '/home': (context) => const HomePage(),
-          '/wismon': (context) => const WismonPage(),
+          '/home': (context) => BlocProvider.value(
+            value: di.sl<AuthBloc>(),
+            child: const HomePage(),
+          ),
         },
       ),
     );
   }
 }
 
-// Wrapper to show login page with error message
-class LoginPageWithError extends StatefulWidget {
-  final String errorMessage;
-
-  const LoginPageWithError({super.key, required this.errorMessage});
-
-  @override
-  State<LoginPageWithError> createState() => _LoginPageWithErrorState();
-}
-
-class _LoginPageWithErrorState extends State<LoginPageWithError> {
-  @override
-  void initState() {
-    super.initState();
-    // Show error message after widget is built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.errorMessage),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    });
-  }
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const LoginPage();
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        if (state is AuthAuthenticated) {
+          return const HomePage();
+        }
+        if (state is AuthUnauthenticated || state is AuthError) {
+          return const LoginPage();
+        }
+        return const LoadingScreen();
+      },
+    );
+  }
+}
+
+class LoadingScreen extends StatelessWidget {
+  const LoadingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.blue[50],
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // App Logo
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.blue[600],
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.school, color: Colors.white, size: 60),
+            ),
+            const SizedBox(height: 32),
+
+            // App Title
+            Text(
+              'Wismon Keuangan',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue[800],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Student Payment Management System',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 48),
+
+            // Loading indicator
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Loading...',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
