@@ -219,16 +219,18 @@ export class PaymentController {
    * Get available payment types for filtering
    */
   async getPaymentTypes(req: Request, res: Response): Promise<void> {
+    console.log("💳 PAYMENT TYPES - Request received:", {
+      timestamp: new Date().toISOString(),
+    });
+
     try {
-      // This is a simple implementation that returns common payment types
-      // In a real application, this might query the database for available types
-      const paymentTypes = [
-        "Tunai - Kas Akademi",
-        "Cek - Bank BNI",
-        "Ijazah",
-        "KTI dan Wisuda",
-        "Lain-lain",
-      ];
+      console.log("💳 PAYMENT TYPES - Calling service...");
+      const paymentTypes = await paymentService.getPaymentTypes();
+
+      console.log("💳 PAYMENT TYPES - Service result:", {
+        count: paymentTypes?.length || 0,
+        types: paymentTypes,
+      });
 
       res.status(200).json({
         success: true,
@@ -236,7 +238,7 @@ export class PaymentController {
         data: paymentTypes,
       } as ApiResponse);
     } catch (error) {
-      console.error("Get payment types error:", error);
+      console.error("💳 PAYMENT TYPES - Error:", error);
 
       res.status(500).json({
         success: false,

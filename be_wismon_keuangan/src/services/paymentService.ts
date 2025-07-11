@@ -66,7 +66,7 @@ export class PaymentService {
       }
 
       if (type) {
-        conditions.push("jt.nama LIKE ?");
+        conditions.push("a_credit.nama LIKE ?");
         params.push(`%${type}%`);
       }
 
@@ -80,7 +80,7 @@ export class PaymentService {
           orderByClause = `ORDER BY t.nominal ${sortOrder.toUpperCase()}`;
           break;
         case "type":
-          orderByClause = `ORDER BY jt.nama ${sortOrder.toUpperCase()}`;
+          orderByClause = `ORDER BY a_credit.nama ${sortOrder.toUpperCase()}`;
           break;
         default:
           orderByClause = `ORDER BY t.tanggal ${sortOrder.toUpperCase()}, t.jam ${sortOrder.toUpperCase()}`;
@@ -93,22 +93,13 @@ export class PaymentService {
           t.no as tx_id,
           DATE_FORMAT(t.tanggal, '%d %M %Y') as tanggal,
           DATE_FORMAT(CONCAT(t.tanggal, ' ', IFNULL(t.jam, '00:00:00')), '%d %M %Y, %H:%i:%s WIB') as tanggal_full,
-          jt.nama as type,
+          a_credit.nama as type,
           CONCAT('Rp ', FORMAT(t.nominal, 0)) as jumlah,
           'LUNAS' as status,
-          CASE
-            WHEN a_debit.kode = 101 THEN CONCAT(a_debit.kode, ' - ', a_debit.nama)
-            WHEN a_credit.kode = 101 THEN CONCAT(a_credit.kode, ' - ', a_credit.nama)
-            ELSE 'Other Method'
-          END as method,
-          CASE
-            WHEN a_debit.kode = 101 THEN a_debit.kode
-            WHEN a_credit.kode = 101 THEN a_credit.kode
-            ELSE 'OTHER'
-          END as method_code
+          CONCAT(a_debit.kode, ' - ', a_debit.nama) as method,
+          a_debit.kode as method_code
         FROM transaksi t
         INNER JOIN t_pembayaranmahasiswa tpm ON t.no = tpm.no
-        LEFT JOIN jenistransaksi jt ON t.kodejenistransaksi = jt.kode
         LEFT JOIN akun a_debit ON t.kodeakundebit = a_debit.kode
         LEFT JOIN akun a_credit ON t.kodeakunkredit = a_credit.kode
         WHERE ${conditions.join(" AND ")}
@@ -129,7 +120,6 @@ export class PaymentService {
         SELECT COUNT(*) as total
         FROM transaksi t
         INNER JOIN t_pembayaranmahasiswa tpm ON t.no = tpm.no
-        LEFT JOIN jenistransaksi jt ON t.kodejenistransaksi = jt.kode
         LEFT JOIN akun a_debit ON t.kodeakundebit = a_debit.kode
         LEFT JOIN akun a_credit ON t.kodeakunkredit = a_credit.kode
         WHERE ${conditions.join(" AND ")}
@@ -185,13 +175,13 @@ export class PaymentService {
     try {
       const query = `
         SELECT 
-          jt.nama as payment_type,
+          a_credit.nama as payment_type,
           SUM(t.nominal) as total_amount
         FROM transaksi t
         INNER JOIN t_pembayaranmahasiswa tpm ON t.no = tpm.no
-        LEFT JOIN jenistransaksi jt ON t.kodejenistransaksi = jt.kode
+        LEFT JOIN akun a_credit ON t.kodeakunkredit = a_credit.kode
         WHERE tpm.nrm = ?
-        GROUP BY jt.nama, jt.kode
+        GROUP BY a_credit.nama, a_credit.kode
         ORDER BY total_amount DESC
       `;
 
@@ -231,23 +221,14 @@ export class PaymentService {
           t.no as tx_id,
           DATE_FORMAT(t.tanggal, '%d %M %Y') as tanggal,
           DATE_FORMAT(CONCAT(t.tanggal, ' ', IFNULL(t.jam, '00:00:00')), '%d %M %Y, %H:%i:%s WIB') as tanggal_full,
-          jt.nama as type,
+          a_credit.nama as type,
           CONCAT('Rp ', FORMAT(t.nominal, 0)) as jumlah,
           'LUNAS' as status,
-          CASE
-            WHEN a_debit.kode = 101 THEN CONCAT(a_debit.kode, ' - ', a_debit.nama)
-            WHEN a_credit.kode = 101 THEN CONCAT(a_credit.kode, ' - ', a_credit.nama)
-            ELSE 'Other Method'
-          END as method,
-          CASE
-            WHEN a_debit.kode = 101 THEN a_debit.kode
-            WHEN a_credit.kode = 101 THEN a_credit.kode
-            ELSE 'OTHER'
-          END as method_code,
+          CONCAT(a_debit.kode, ' - ', a_debit.nama) as method,
+          a_debit.kode as method_code,
           tpm.prodi
         FROM transaksi t
         INNER JOIN t_pembayaranmahasiswa tpm ON t.no = tpm.no
-        LEFT JOIN jenistransaksi jt ON t.kodejenistransaksi = jt.kode
         LEFT JOIN akun a_debit ON t.kodeakundebit = a_debit.kode
         LEFT JOIN akun a_credit ON t.kodeakunkredit = a_credit.kode
         WHERE t.no = ? AND tpm.nrm = ?
@@ -320,6 +301,36 @@ export class PaymentService {
     } catch (error) {
       console.error("Error refreshing payment data:", error);
       return false;
+    }
+  }
+
+  /**
+   * Get available payment types from the database
+   */
+  async getPaymentTypes(): Promise<{ kode: string; nama: string }[]> {
+    try {
+      const query = `
+        SELECT DISTINCT a.kode, a.nama 
+        FROM akun a
+        INNER JOIN transaksi t ON t.kodeakunkredit = a.kode
+        INNER JOIN t_pembayaranmahasiswa tpm ON t.no = tpm.no
+        WHERE a.kode >= 400 AND a.kode < 500
+        ORDER BY a.kode
+      `;
+
+      console.log("🗄️ PAYMENT SERVICE - Getting payment types from akun table");
+
+      const results = (await executeWismonQuery(query, [])) as any[];
+
+      console.log("🗄️ PAYMENT SERVICE - Payment types retrieved:", {
+        count: results?.length || 0,
+        types: results,
+      });
+
+      return results as { kode: string; nama: string }[];
+    } catch (error) {
+      console.error("Error getting payment types:", error);
+      throw new Error("Database error while getting payment types");
     }
   }
 }
