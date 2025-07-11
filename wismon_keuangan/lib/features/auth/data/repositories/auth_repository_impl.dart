@@ -23,7 +23,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> logout() async {
     try {
-      await apiService.clearToken();
+      await apiService.clearAuthToken();
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -43,7 +43,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, String?>> getToken() async {
     try {
-      final token = await apiService.getToken();
+      final token = await apiService.getAuthToken();
       return Right(token);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -53,7 +53,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> clearToken() async {
     try {
-      await apiService.clearToken();
+      await apiService.clearAuthToken();
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

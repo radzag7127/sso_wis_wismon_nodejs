@@ -7,9 +7,13 @@ import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/pages/login_page.dart';
-import 'features/dashboard/presentation/pages/home_page.dart';
+import 'features/dashboard/presentation/pages/main_navigation_page.dart';
 import 'features/payment/presentation/bloc/payment_bloc.dart';
 import 'core/services/api_service.dart';
+
+// Cache the text theme to prevent repeated font loading
+late final TextTheme _cachedTextTheme;
+late final ThemeData _cachedThemeData;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,12 +25,47 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
     ),
   );
 
+  // Pre-cache fonts for better performance
+  await _initializeTheme();
+
   await di.init();
   runApp(const MyApp());
+}
+
+Future<void> _initializeTheme() async {
+  // Pre-load and cache the Google Font to prevent lag
+  _cachedTextTheme = GoogleFonts.plusJakartaSansTextTheme();
+
+  _cachedThemeData = ThemeData(
+    primarySwatch: Colors.blue,
+    textTheme: _cachedTextTheme,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      },
+    ),
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF135EA2),
+      brightness: Brightness.light,
+    ),
+    // Optimize app bar theme
+    appBarTheme: const AppBarTheme(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      foregroundColor: Color(0xFF121212),
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
+    ),
+    // Optimize scaffold theme
+    scaffoldBackgroundColor: const Color(0xFFFBFBFB),
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -56,8 +95,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     // Optimize memory when app goes to background
     if (state == AppLifecycleState.paused) {
-      // Could implement memory cleanup here if needed
+      // Force garbage collection when app is paused
+      _performMemoryCleanup();
     }
+  }
+
+  void _performMemoryCleanup() {
+    // Clear unnecessary cached images
+    imageCache.clear();
+    imageCache.clearLiveImages();
   }
 
   @override
@@ -81,41 +127,47 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           // Prevent text scaling beyond reasonable limits
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(
-              textScaleFactor: MediaQuery.of(
-                context,
-              ).textScaleFactor.clamp(0.8, 1.3),
+              textScaler: TextScaler.linear(
+                MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.3),
+              ),
             ),
             child: child!,
           );
         },
 
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          // Cache text theme for better performance
-          textTheme: GoogleFonts.plusJakartaSansTextTheme(
-            Theme.of(context).textTheme,
-          ),
-          // Optimize visual density for Android
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          // Reduce animation duration for snappier feel
-          pageTransitionsTheme: const PageTransitionsTheme(
-            builders: {
-              TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-              TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-            },
-          ),
-          // Optimize material design
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF135EA2),
-            brightness: Brightness.light,
-          ),
-        ),
+        theme: _cachedThemeData,
 
         home: const AuthWrapper(),
 
         // Performance monitoring in debug mode
         showPerformanceOverlay: false, // Set to true only for debugging
+        // Optimize route generation
+        onGenerateRoute: (settings) {
+          switch (settings.name) {
+            case '/login':
+              return PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    const LoginPage(),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                transitionDuration: const Duration(milliseconds: 200),
+              );
+            case '/main':
+              return PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    const MainNavigationPage(),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                transitionDuration: const Duration(milliseconds: 200),
+              );
+            default:
+              return null;
+          }
+        },
       ),
     );
   }
@@ -127,9 +179,13 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
+      buildWhen: (previous, current) {
+        // Only rebuild when auth state actually changes
+        return previous.runtimeType != current.runtimeType;
+      },
       builder: (context, state) {
         if (state is AuthAuthenticated) {
-          return const HomePage();
+          return const MainNavigationPage();
         }
         if (state is AuthUnauthenticated || state is AuthError) {
           return const LoginPage();
@@ -147,43 +203,69 @@ class LoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // App Logo
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF135EA2),
-                borderRadius: BorderRadius.circular(20),
+      body: RepaintBoundary(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // App Logo with Hero animation
+              Hero(
+                tag: 'app_logo',
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF135EA2),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x20135EA2),
+                        blurRadius: 20,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.school,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
               ),
-              child: const Icon(Icons.school, color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // App Title
-            const Text(
-              'Wismon Keuangan',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF135EA2),
+              // App Title
+              const Text(
+                'Wismon Keuangan',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF135EA2),
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Student Payment System',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 32),
+              const SizedBox(height: 8),
+              Text(
+                'Student Payment System',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 32),
 
-            // Loading indicator
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF135EA2)),
-            ),
-          ],
+              // Loading indicator with animation
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF135EA2)),
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

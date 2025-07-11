@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
 import 'package:wismon_keuangan/features/payment/domain/entities/payment.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_bloc.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_event.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_state.dart';
 import 'package:wismon_keuangan/features/payment/presentation/pages/transaction_detail_page.dart';
+import 'package:wismon_keuangan/features/payment/presentation/components/components.dart';
 
 class WismonPage extends StatefulWidget {
   const WismonPage({super.key});
@@ -35,13 +35,6 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
     {'kode': 'KTI dan Wisuda', 'nama': 'KTI dan Wisuda'},
   ];
   String _selectedPaymentTypeCode = 'all';
-
-  // Static currency formatter to avoid recreation
-  static final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'id_ID',
-    symbol: 'Rp ',
-    decimalDigits: 0,
-  );
 
   @override
   void initState() {
@@ -369,7 +362,7 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
     for (int i = 0; i < filteredBreakdown.length; i += 2) {
       final item1 = filteredBreakdown[i];
       final card1 = Expanded(
-        child: _PaymentSummaryCard(
+        child: PaymentSummaryCard(
           title: paymentTypeMapping[item1.key]!,
           amount: item1.value,
         ),
@@ -380,7 +373,7 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
       if (i + 1 < filteredBreakdown.length) {
         final item2 = filteredBreakdown[i + 1];
         final card2 = Expanded(
-          child: _PaymentSummaryCard(
+          child: PaymentSummaryCard(
             title: paymentTypeMapping[item2.key]!,
             amount: item2.value,
           ),
@@ -398,7 +391,7 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
   }
 
   Widget _buildTransactionCard(BuildContext context, PaymentHistoryItem item) {
-    return _TransactionCard(
+    return TransactionCard(
       item: item,
       onTap: () {
         Navigator.of(context).push(
@@ -408,30 +401,6 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
         );
       },
     );
-  }
-
-  String _formatDate(String dateString) {
-    try {
-      final parts = dateString.split(' ');
-      if (parts.length >= 2) {
-        return '${parts[0]} ${parts[1]}';
-      }
-      return dateString;
-    } catch (e) {
-      return dateString;
-    }
-  }
-
-  String _formatYear(String dateString) {
-    try {
-      final parts = dateString.split(' ');
-      if (parts.length >= 3) {
-        return parts[2];
-      }
-      return DateTime.now().year.toString();
-    } catch (e) {
-      return DateTime.now().year.toString();
-    }
   }
 
   Widget _buildEmptyHistory(BuildContext context) {
@@ -501,204 +470,5 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
         ],
       ),
     );
-  }
-}
-
-// Extracted widget to reduce rebuilds
-class _PaymentSummaryCard extends StatelessWidget {
-  final String title;
-  final double amount;
-
-  const _PaymentSummaryCard({required this.title, required this.amount});
-
-  static final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'id_ID',
-    symbol: 'Rp ',
-    decimalDigits: 0,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: const ShapeDecoration(
-        color: Color(0xFFFAFAFA),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(width: 1, color: Color(0xFFE7E7E7)),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF1C1D1F),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.12,
-              ),
-            ),
-          ),
-          const Divider(height: 1, thickness: 1, color: Color(0xFFE7E7E7)),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              _currencyFormat.format(amount),
-              style: const TextStyle(
-                color: Color(0xFF121111),
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.20,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Extracted transaction card to reduce rebuilds
-class _TransactionCard extends StatelessWidget {
-  final PaymentHistoryItem item;
-  final VoidCallback onTap;
-
-  const _TransactionCard({required this.item, required this.onTap});
-
-  static final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'id_ID',
-    symbol: 'Rp ',
-    decimalDigits: 0,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFFAFAFA),
-      borderRadius: BorderRadius.circular(8),
-      elevation: 2,
-      shadowColor: const Color(0x0C000000),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.type,
-                      style: const TextStyle(
-                        color: Color(0xFF121315),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Transaction ID Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFA5DCFF),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            item.txId,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Color(0xFF323335),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              height: 1.78,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Amount
-                        Text(
-                          _currencyFormat.format(item.jumlah),
-                          style: const TextStyle(
-                            color: Color(0xFF858586),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: -0.12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Date
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatDate(item.tanggal),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF858586),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.09,
-                    ),
-                  ),
-                  Text(
-                    _formatYear(item.tanggal),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF858586),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.09,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(String dateString) {
-    try {
-      final parts = dateString.split(' ');
-      if (parts.length >= 2) {
-        return '${parts[0]} ${parts[1]}';
-      }
-      return dateString;
-    } catch (e) {
-      return dateString;
-    }
-  }
-
-  String _formatYear(String dateString) {
-    try {
-      final parts = dateString.split(' ');
-      if (parts.length >= 3) {
-        return parts[2];
-      }
-      return DateTime.now().year.toString();
-    } catch (e) {
-      return DateTime.now().year.toString();
-    }
   }
 }

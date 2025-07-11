@@ -1,58 +1,79 @@
 import 'dart:convert';
-import 'dart:developer';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/data/models/user_model.dart';
 import '../../features/payment/data/models/payment_model.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android emulator (maps to host localhost)
-  // Use localhost for web/desktop development
-  static const String baseUrl = 'http://10.0.2.2:3000';
+  // API Base URL
+  // For Chrome/Web development: http://localhost:3000
+  // For Android emulator: http://10.0.2.2:3000
+  // For iOS simulator: http://localhost:3000
+  static const String baseUrl = 'http://localhost:3000';
+  static http.Client? _client;
+  static final Map<String, dynamic> _cache = {};
+  static const int _cacheTimeout = 5 * 60 * 1000; // 5 minutes
 
-  // Singleton HTTP client for connection pooling
-  static final http.Client _httpClient = http.Client();
-
-  // Cache for frequently accessed data
-  static UserModel? _cachedUser;
-  static List<PaymentHistoryItemModel>? _cachedPaymentHistory;
-  static PaymentSummaryModel? _cachedPaymentSummary;
-  static DateTime? _lastCacheUpdate;
-
-  // Cache duration (5 minutes)
-  static const Duration _cacheDuration = Duration(minutes: 5);
-
-  // Store token with optimization
-  Future<void> saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+  // Regular constructor for DI, but still use singleton pattern for client
+  ApiService() {
+    _initializeClient();
   }
 
-  // Get stored token with caching
-  static String? _cachedToken;
-  Future<String?> getToken() async {
-    if (_cachedToken != null) return _cachedToken;
-
-    final prefs = await SharedPreferences.getInstance();
-    _cachedToken = prefs.getString('auth_token');
-    return _cachedToken;
+  void _initializeClient() {
+    _client ??= http.Client();
   }
 
-  // Clear token and cache
-  Future<void> clearToken() async {
-    _cachedToken = null;
-    _cachedUser = null;
-    _cachedPaymentHistory = null;
-    _cachedPaymentSummary = null;
-    _lastCacheUpdate = null;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+  // Cache management for better performance
+  bool _isCacheValid(String key) {
+    if (!_cache.containsKey(key)) return false;
+    final cachedData = _cache[key];
+    final timestamp = cachedData['timestamp'] as int;
+    return DateTime.now().millisecondsSinceEpoch - timestamp < _cacheTimeout;
   }
 
-  // Optimized headers with caching
-  Future<Map<String, String>> getHeaders() async {
-    final token = await getToken();
+  void _setCache(String key, dynamic data) {
+    _cache[key] = {
+      'data': data,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+  }
+
+  dynamic _getCache(String key) {
+    if (_isCacheValid(key)) {
+      return _cache[key]['data'];
+    }
+    return null;
+  }
+
+  Future<String?> getAuthToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('auth_token');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> setAuthToken(String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', token);
+    } catch (e) {
+      // Handle storage error gracefully
+    }
+  }
+
+  Future<void> clearAuthToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+    } catch (e) {
+      // Handle error gracefully
+    }
+  }
+
+  Map<String, String> _getHeaders([String? token]) {
     final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -65,78 +86,99 @@ class ApiService {
     return headers;
   }
 
-  // Check if cache is valid
-  bool _isCacheValid() {
-    if (_lastCacheUpdate == null) return false;
-    return DateTime.now().difference(_lastCacheUpdate!) < _cacheDuration;
+  // Generic GET method
+  Future<Map<String, dynamic>> get(
+    String endpoint, {
+    bool useCache = false,
+  }) async {
+    final cacheKey = 'GET_$endpoint';
+
+    // Check cache first if enabled
+    if (useCache) {
+      final cachedData = _getCache(cacheKey);
+      if (cachedData != null) {
+        return cachedData;
+      }
+    }
+
+    try {
+      final token = await getAuthToken();
+      final response = await _client!
+          .get(Uri.parse('$baseUrl$endpoint'), headers: _getHeaders(token))
+          .timeout(const Duration(seconds: 30));
+
+      final data = _handleResponse(response);
+
+      // Cache successful responses
+      if (useCache && response.statusCode == 200) {
+        _setCache(cacheKey, data);
+      }
+
+      return data;
+    } on SocketException {
+      throw Exception('Tidak ada koneksi internet');
+    } on HttpException {
+      throw Exception('Gagal terhubung ke server');
+    } on FormatException {
+      throw Exception('Respons server tidak valid');
+    } catch (e) {
+      throw Exception('Terjadi kesalahan: ${e.toString()}');
+    }
   }
 
-  // Login with error handling optimization
+  // Generic POST method
+  Future<Map<String, dynamic>> post(
+    String endpoint,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final token = await getAuthToken();
+      final response = await _client!
+          .post(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: _getHeaders(token),
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      return _handleResponse(response);
+    } on SocketException {
+      throw Exception('Tidak ada koneksi internet');
+    } on HttpException {
+      throw Exception('Gagal terhubung ke server');
+    } on FormatException {
+      throw Exception('Respons server tidak valid');
+    } catch (e) {
+      throw Exception('Terjadi kesalahan: ${e.toString()}');
+    }
+  }
+
+  // AUTH METHODS
   Future<UserModel> login(String namamNim, String nrm) async {
-    final url = Uri.parse('$baseUrl/api/auth/login');
-    final headers = await getHeaders();
-    final body = jsonEncode({'namam_nim': namamNim, 'nrm': nrm});
+    final data = await post('/api/auth/login', {
+      'namam_nim': namamNim,
+      'nrm': nrm,
+    });
 
-    try {
-      final response = await _httpClient
-          .post(url, headers: headers, body: body)
-          .timeout(const Duration(seconds: 10));
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
-        // Cache token and user
-        _cachedToken = data['data']['token'];
-        await saveToken(_cachedToken!);
-
-        _cachedUser = UserModel.fromJson(data['data']['user']);
-        return _cachedUser!;
-      } else {
-        throw Exception(data['message'] ?? 'Login failed');
-      }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception(
-          'Connection timeout. Please check your internet connection.',
-        );
-      }
-      rethrow;
+    if (data['success']) {
+      await setAuthToken(data['data']['token']);
+      return UserModel.fromJson(data['data']['user']);
+    } else {
+      throw Exception(data['message'] ?? 'Login failed');
     }
   }
 
-  // Get profile with caching
   Future<UserModel> getProfile() async {
-    // Return cached user if available and valid
-    if (_cachedUser != null && _isCacheValid()) {
-      return _cachedUser!;
-    }
+    final data = await get('/api/auth/profile', useCache: true);
 
-    final url = Uri.parse('$baseUrl/api/auth/profile');
-    final headers = await getHeaders();
-
-    try {
-      final response = await _httpClient
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 10));
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
-        _cachedUser = UserModel.fromJson(data['data']);
-        _lastCacheUpdate = DateTime.now();
-        return _cachedUser!;
-      } else {
-        throw Exception(data['message'] ?? 'Failed to get profile');
-      }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Connection timeout. Please try again.');
-      }
-      rethrow;
+    if (data['success']) {
+      return UserModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Failed to get profile');
     }
   }
 
-  // Optimized payment history with caching and pagination
+  // PAYMENT METHODS
   Future<List<PaymentHistoryItemModel>> getPaymentHistory({
     int page = 1,
     int limit = 20,
@@ -147,17 +189,6 @@ class ApiService {
     String sortOrder = 'desc',
     bool forceRefresh = false,
   }) async {
-    // Return cached data if available and no filters applied
-    if (!forceRefresh &&
-        page == 1 &&
-        startDate == null &&
-        endDate == null &&
-        type == null &&
-        _cachedPaymentHistory != null &&
-        _isCacheValid()) {
-      return _cachedPaymentHistory!;
-    }
-
     final queryParams = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
@@ -174,135 +205,108 @@ class ApiService {
     ).replace(queryParameters: queryParams);
 
     try {
-      final headers = await getHeaders();
-      final response = await _httpClient
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 15));
+      final token = await getAuthToken();
+      final response = await _client!
+          .get(uri, headers: _getHeaders(token))
+          .timeout(const Duration(seconds: 30));
 
-      // Minimal logging - only errors in production
-      if (response.statusCode != 200) {
-        log('Payment History API Error: ${response.statusCode}');
-      }
+      final data = _handleResponse(response);
 
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
+      if (data['success']) {
         final List<dynamic> historyData = data['data']['data'];
-        final historyItems = historyData
+        return historyData
             .map((item) => PaymentHistoryItemModel.fromJson(item))
             .toList();
-
-        // Cache only if it's the first page with no filters
-        if (page == 1 && startDate == null && endDate == null && type == null) {
-          _cachedPaymentHistory = historyItems;
-          _lastCacheUpdate = DateTime.now();
-        }
-
-        return historyItems;
       } else {
         throw Exception(data['message'] ?? 'Failed to get payment history');
       }
+    } on SocketException {
+      throw Exception('Tidak ada koneksi internet');
+    } on HttpException {
+      throw Exception('Gagal terhubung ke server');
+    } on FormatException {
+      throw Exception('Respons server tidak valid');
     } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Connection timeout. Please try again.');
-      }
-      rethrow;
+      throw Exception('Terjadi kesalahan: ${e.toString()}');
     }
   }
 
-  // Get payment summary with caching
   Future<PaymentSummaryModel> getPaymentSummary({
     bool forceRefresh = false,
   }) async {
-    // Return cached data if available and valid
-    if (!forceRefresh && _cachedPaymentSummary != null && _isCacheValid()) {
-      return _cachedPaymentSummary!;
-    }
+    final data = await get('/api/payments/summary', useCache: !forceRefresh);
 
-    final url = Uri.parse('$baseUrl/api/payments/summary');
-
-    try {
-      final headers = await getHeaders();
-      final response = await _httpClient
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 10));
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
-        _cachedPaymentSummary = PaymentSummaryModel.fromJson(data['data']);
-        _lastCacheUpdate = DateTime.now();
-        return _cachedPaymentSummary!;
-      } else {
-        throw Exception(data['message'] ?? 'Failed to get payment summary');
-      }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Connection timeout. Please try again.');
-      }
-      rethrow;
+    if (data['success']) {
+      return PaymentSummaryModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Failed to get payment summary');
     }
   }
 
-  // Get transaction detail (no caching as it's specific)
   Future<TransactionDetailModel> getTransactionDetail(
     String transactionId,
   ) async {
-    final url = Uri.parse('$baseUrl/api/payments/detail/$transactionId');
+    final data = await get('/api/payments/detail/$transactionId');
 
-    try {
-      final headers = await getHeaders();
-      final response = await _httpClient
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 10));
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
-        return TransactionDetailModel.fromJson(data['data']);
-      } else {
-        throw Exception(data['message'] ?? 'Failed to get transaction detail');
-      }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Connection timeout. Please try again.');
-      }
-      rethrow;
+    if (data['success']) {
+      return TransactionDetailModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Failed to get transaction detail');
     }
   }
 
-  // Refresh payment data with cache invalidation
   Future<bool> refreshPaymentData() async {
-    // Clear cache to force refresh
-    _cachedPaymentHistory = null;
-    _cachedPaymentSummary = null;
-    _lastCacheUpdate = null;
+    final data = await post('/api/payments/refresh', {});
 
-    final url = Uri.parse('$baseUrl/api/payments/refresh');
-
-    try {
-      final headers = await getHeaders();
-      final response = await _httpClient
-          .post(url, headers: headers)
-          .timeout(const Duration(seconds: 10));
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
-        return data['data']['refreshed'] ?? false;
-      } else {
-        throw Exception(data['message'] ?? 'Failed to refresh payment data');
-      }
-    } catch (e) {
-      if (e.toString().contains('TimeoutException')) {
-        throw Exception('Connection timeout. Please try again.');
-      }
-      rethrow;
+    if (data['success']) {
+      // Clear payment-related cache
+      _cache.removeWhere((key, value) => key.contains('payment'));
+      return data['data']['refreshed'] ?? false;
+    } else {
+      throw Exception(data['message'] ?? 'Failed to refresh payment data');
     }
   }
 
-  // Dispose method for cleanup
+  Map<String, dynamic> _handleResponse(http.Response response) {
+    final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+
+    switch (response.statusCode) {
+      case 200:
+      case 201:
+        return responseData;
+      case 400:
+        throw Exception(responseData['message'] ?? 'Permintaan tidak valid');
+      case 401:
+        throw Exception('Sesi telah berakhir, silakan login kembali');
+      case 403:
+        throw Exception('Akses ditolak');
+      case 404:
+        throw Exception('Data tidak ditemukan');
+      case 500:
+        throw Exception('Terjadi kesalahan pada server');
+      default:
+        throw Exception('Terjadi kesalahan tidak terduga');
+    }
+  }
+
+  // Clean up resources
   static void dispose() {
-    _httpClient.close();
+    _client?.close();
+    _client = null;
+    _cache.clear();
+  }
+
+  // Clear cache when needed
+  static void clearCache() {
+    _cache.clear();
+  }
+
+  // Clear expired cache entries
+  static void cleanExpiredCache() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _cache.removeWhere((key, value) {
+      final timestamp = value['timestamp'] as int;
+      return now - timestamp >= _cacheTimeout;
+    });
   }
 }
