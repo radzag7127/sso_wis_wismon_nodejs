@@ -178,6 +178,41 @@ class ApiService {
     }
   }
 
+  // REGISTRATION METHODS
+  Future<Map<String, dynamic>> verifyIdentity({
+    required String nama,
+    required String nim,
+    required String nrm,
+    required String tglahir,
+  }) async {
+    return await post('/api/registration/verify-identity', {
+      'nama': nama,
+      'nim': nim,
+      'nrm': nrm,
+      'tglahir': tglahir,
+    });
+  }
+
+  Future<Map<String, dynamic>> createAccount({
+    required String nama,
+    required String nim,
+    required String nrm,
+    required String tglahir,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    return await post('/api/registration/create-account', {
+      'nama': nama,
+      'nim': nim,
+      'nrm': nrm,
+      'tglahir': tglahir,
+      'username': username,
+      'email': email,
+      'password': password,
+    });
+  }
+
   // PAYMENT METHODS
   Future<List<PaymentHistoryItemModel>> getPaymentHistory({
     int page = 1,

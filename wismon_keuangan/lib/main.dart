@@ -7,6 +7,7 @@ import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/pages/login_page.dart';
+import 'features/auth/presentation/pages/registration_page.dart';
 import 'features/dashboard/presentation/pages/main_navigation_page.dart';
 import 'features/payment/presentation/bloc/payment_bloc.dart';
 import 'core/services/api_service.dart';
@@ -148,6 +149,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               return PageRouteBuilder(
                 pageBuilder: (context, animation, secondaryAnimation) =>
                     const LoginPage(),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                transitionDuration: const Duration(milliseconds: 200),
+              );
+            case '/register':
+              return PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    const RegistrationPage(),
                 transitionsBuilder:
                     (context, animation, secondaryAnimation, child) {
                       return FadeTransition(opacity: animation, child: child);

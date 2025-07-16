@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { testConnections } from "./config/database";
 import authRoutes from "./routes/authRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import registrationRoutes from "./routes/registrationRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -58,6 +59,7 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/registration", registrationRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -81,6 +83,10 @@ app.get("/", (req, res) => {
         login: "POST /api/auth/login",
         profile: "GET /api/auth/profile",
         verify: "POST /api/auth/verify",
+      },
+      registration: {
+        verifyIdentity: "POST /api/registration/verify-identity",
+        createAccount: "POST /api/registration/create-account",
       },
       payments: {
         history: "GET /api/payments/history",
