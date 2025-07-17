@@ -121,3 +121,39 @@ export interface TransactionDetail extends PaymentHistoryItem {
     [key: string]: string;
   };
 }
+
+
+
+
+
+
+// --- Akademik ---
+export interface Course {
+  namamk: string;
+  sks: number;
+  nilai?: string;
+  bobotNilai?: number;
+  semesterKe?: number;
+}
+
+export interface Transkrip {
+  ipk: string;
+  total_sks: number;
+  courses: Course[];
+}
+
+export interface Khs {
+  ips: string;
+  total_sks: number;
+  courses: Course[];
+}
+
+export interface Krs {
+  total_sks: number;
+  courses: Pick<Course, 'namamk' | 'sks'>[]; // KRS hanya butuh nama dan sks
+}
+
+export interface DaftarMahasiswa {
+  nrm: string;
+  nama: string;
+}

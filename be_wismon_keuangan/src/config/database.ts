@@ -50,9 +50,22 @@ const wismonDbConfig: DatabaseConfig = {
   timeout: 60000,
 };
 
+// WISAKA Database Configuration
+const wisakaDbConfig: DatabaseConfig = {
+  host: process.env.DB_WISAKA_HOST || "127.0.0.1",
+  port: parseInt(process.env.DB_WISAKA_PORT || "3306"),
+  user: process.env.DB_WISAKA_USER || "root",
+  password: process.env.DB_WISAKA_PASSWORD || "",
+  database: process.env.DB_WISAKA_NAME || "u4714151_wisaka",
+  connectionLimit: 10,
+  acquireTimeout: 60000,
+  timeout: 60000,
+};
+
 // Create connection pools
 export const ssoPool = mysql.createPool(ssoDbConfig);
 export const wisPool = mysql.createPool(wisDbConfig);
+export const wisakaPool = mysql.createPool(wisakaDbConfig);
 export const wismonPool = mysql.createPool(wismonDbConfig);
 
 // Test database connections
@@ -60,6 +73,7 @@ export const testConnections = async () => {
   const results = {
     sso: false,
     wis: false,
+    wisaka: false,
     wismon: false,
   };
 
@@ -85,6 +99,18 @@ export const testConnections = async () => {
     results.wis = true;
   } catch (error) {
     console.error("❌ WIS Database connection failed:", error);
+  }
+
+  try {
+    const wisakaConnection = await wisakaPool.getConnection();
+    console.log("✅ WISAKA Database connected successfully");
+    console.log(
+      `📊 WISAKA Connected to: ${wisakaDbConfig.host}:${wisakaDbConfig.port}/${wisakaDbConfig.database}`
+    );
+    wisakaConnection.release();
+    results.wisaka = true;
+  } catch (error) {
+    console.error("❌ WISAKA Database connection failed:", error);
   }
 
   try {
@@ -123,6 +149,33 @@ export const executeWisQuery = async (query: string, params?: any[]) => {
   }
 };
 
+export const executeWisakaQuery = async (query: string, params?: any[]) => {
+  console.log("🗄️ WISAKA DB - Executing query:", {
+    query: query.replace(/\s+/g, " ").trim(),
+    params,
+    paramsTypes: params?.map((p) => ({ value: p, type: typeof p })),
+    timestamp: new Date().toISOString(),
+  });
+
+  try {
+    const [results] = await wisakaPool.execute(query, params);
+    console.log("🗄️ WISAKA DB - Query successful:", {
+      resultCount: Array.isArray(results) ? results.length : "Not array",
+      resultType: typeof results,
+      firstResult: Array.isArray(results) ? results[0] : results,
+    });
+    return results;
+  } catch (error) {
+    console.error("🗄️ WISAKA DB - Query error:", {
+      error,
+      query: query.replace(/\s+/g, " ").trim(),
+      params,
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+    throw error;
+  }
+};
+
 export const executeWismonQuery = async (query: string, params?: any[]) => {
   console.log("🗄️ WISMON DB - Executing query:", {
     query: query.replace(/\s+/g, " ").trim(),
@@ -133,13 +186,11 @@ export const executeWismonQuery = async (query: string, params?: any[]) => {
 
   try {
     const [results] = await wismonPool.execute(query, params);
-
     console.log("🗄️ WISMON DB - Query successful:", {
       resultCount: Array.isArray(results) ? results.length : "Not array",
       resultType: typeof results,
       firstResult: Array.isArray(results) ? results[0] : results,
     });
-
     return results;
   } catch (error) {
     console.error("🗄️ WISMON DB - Query error:", {
@@ -153,7 +204,7 @@ export const executeWismonQuery = async (query: string, params?: any[]) => {
 };
 
 // Export pools for direct access if needed
-export { ssoDbConfig, wisDbConfig, wismonDbConfig };
+export { ssoDbConfig, wisDbConfig, wisakaDbConfig, wismonDbConfig };
 
 // Keep backward compatibility
 export const pool = ssoPool; // Default to SSO for auth

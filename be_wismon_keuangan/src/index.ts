@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { testConnections } from "./config/database";
 import authRoutes from "./routes/authRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import akademikRoutes from "./routes/akademikRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -58,6 +59,8 @@ app.use((req, res, next) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
+//akademik routes
+app.use("/api/akademik", akademikRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {

@@ -5,6 +5,13 @@ import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_event.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+// --- IMPORT UNTUK FITUR KRS ---
+// Import ini diperlukan untuk mengakses service locator (GetIt) dan halaman KRS.
+import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
+import 'package:wismon_keuangan/core/services/api_service.dart';
+import 'package:wismon_keuangan/features/krs/presentation/pages/krs_page.dart';
+// ------------------------------------
+
 class MenuPage extends StatelessWidget {
   const MenuPage({super.key});
 
@@ -200,13 +207,39 @@ class MenuPage extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
+            // --- PERUBAHAN UNTUK FITUR KRS ---
+            // Logika onTap diubah untuk menangani navigasi ke halaman KRS.
             _buildMenuItem(
               context: context,
               icon: Icons.edit_note_outlined,
               title: 'Kartu Rencana Studi (KRS)',
               subtitle: 'Rencanakan dan pilih mata kuliah selama perkuliahan.',
-              onTap: () {
-                _showComingSoonSnackBar(context, 'Kartu Rencana Studi');
+              onTap: () async {
+                // Mengambil instance ApiService dari service locator (GetIt).
+                final apiService = di.sl<ApiService>();
+                // Mengambil token otentikasi yang tersimpan.
+                final token = await apiService.getAuthToken();
+
+                // Pastikan widget masih ada di tree sebelum melakukan navigasi.
+                if (context.mounted) {
+                  if (token != null) {
+                    // Jika token ada, navigasi ke KrsPage dengan membawa token.
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => KrsPage(token: token)),
+                    );
+                  } else {
+                    // Jika token tidak ada (misal, sesi berakhir), tampilkan pesan error.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Sesi Anda telah berakhir. Silakan login kembali.',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
             const SizedBox(height: 16),

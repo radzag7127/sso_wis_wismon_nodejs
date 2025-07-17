@@ -14,6 +14,12 @@ import '../../features/payment/domain/usecases/get_payment_summary_usecase.dart'
 import '../../features/payment/domain/usecases/get_transaction_detail_usecase.dart';
 import '../../features/payment/presentation/bloc/payment_bloc.dart';
 
+// --- IMPORT UNTUK FITUR KRS ---
+import '../../features/krs/data/repositories/krs_repository_impl.dart';
+import '../../features/krs/domain/repositories/krs_repository.dart';
+import '../../features/krs/domain/usecases/get_krs.dart';
+import '../../features/krs/presentation/bloc/krs_cubit.dart';
+
 final sl = GetIt.instance;
 
 Future<void> init() async {
@@ -59,5 +65,23 @@ Future<void> init() async {
       getPaymentSummaryUseCase: sl(),
       getTransactionDetailUseCase: sl(),
     ),
+  );
+
+  // --- BLOK BARU UNTUK FITUR KRS ---
+  // KRS Feature
+  // Repositories
+  sl.registerLazySingleton<KrsRepository>(
+    () => KrsRepositoryImpl(
+      baseUrl: ApiService.baseUrl,
+    ), // Menggunakan baseUrl dari ApiService
+  );
+
+  // Use cases
+  sl.registerLazySingleton(() => GetKrs(sl()));
+
+  // Cubit
+  sl.registerFactory(
+    // --- PERUBAHAN DI SINI ---
+    () => KrsCubit(getKrs: sl(), krsRepository: sl()),
   );
 }
