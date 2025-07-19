@@ -150,7 +150,7 @@ export interface Khs {
 
 export interface Krs {
   total_sks: number;
-  courses: Pick<Course, 'namamk' | 'sks'>[]; // KRS hanya butuh nama dan sks
+  courses: Pick<Course, 'namamk' | 'sks'>[];
 }
 
 export interface DaftarMahasiswa {

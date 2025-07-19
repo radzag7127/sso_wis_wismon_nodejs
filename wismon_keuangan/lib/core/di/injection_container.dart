@@ -20,6 +20,12 @@ import '../../features/krs/domain/repositories/krs_repository.dart';
 import '../../features/krs/domain/usecases/get_krs.dart';
 import '../../features/krs/presentation/bloc/krs_cubit.dart';
 
+// --- IMPORT UNTUK FITUR TRANSKRIP ---
+import 'package:wismon_keuangan/features/transkrip/data/repositories/transkrip_repository_impl.dart';
+import 'package:wismon_keuangan/features/transkrip/domain/repositories/transkrip_repository.dart';
+import 'package:wismon_keuangan/features/transkrip/domain/usecases/get_transkrip_usecase.dart';
+import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_bloc.dart';
+
 final sl = GetIt.instance;
 
 Future<void> init() async {
@@ -67,13 +73,17 @@ Future<void> init() async {
     ),
   );
 
+  // Transkrip Feature
+  sl.registerLazySingleton<TranskripRepository>(
+    () => TranskripRepositoryImpl(apiService: sl()),
+  );
+  sl.registerLazySingleton(() => GetTranskripUseCase(sl()));
+  sl.registerFactory(() => TranskripBloc(getTranskripUseCase: sl()));
+
   // --- BLOK BARU UNTUK FITUR KRS ---
   // KRS Feature
-  // Repositories
   sl.registerLazySingleton<KrsRepository>(
-    () => KrsRepositoryImpl(
-      baseUrl: ApiService.baseUrl,
-    ), // Menggunakan baseUrl dari ApiService
+  () => KrsRepositoryImpl(baseUrl: ApiService.baseUrl), 
   );
 
   // Use cases

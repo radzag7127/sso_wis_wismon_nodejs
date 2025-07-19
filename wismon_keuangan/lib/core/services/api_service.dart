@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/data/models/user_model.dart';
 import '../../features/payment/data/models/payment_model.dart';
 
+// Import TranskripModel
+import '../../features/transkrip/data/models/transkrip_model.dart';
+import 'package:flutter/foundation.dart'; // Import for kDebugMode
+
 class ApiService {
   // API Base URL
   // For Chrome/Web development: http://localhost:3000
@@ -103,9 +107,35 @@ class ApiService {
 
     try {
       final token = await getAuthToken();
+      final url = Uri.parse('$baseUrl$endpoint');
+      final headers = _getHeaders(token);
+
+      // =================================================================
+      // KOMENTAR: Penambahan logging untuk melihat detail request.
+      // Ini akan mencetak URL, headers, dan token yang dikirim ke console.
+      // =================================================================
+      if (kDebugMode) {
+        print('--- 🚀 [API GET Request] 🚀 ---');
+        print('URL: $url');
+        print('Headers: $headers');
+      }
+      // =================================================================
+
       final response = await _client!
-          .get(Uri.parse('$baseUrl$endpoint'), headers: _getHeaders(token))
+          .get(url, headers: headers)
           .timeout(const Duration(seconds: 30));
+
+      // =================================================================
+      // KOMENTAR: Penambahan logging untuk melihat response mentah dari server.
+      // Ini akan mencetak status code (misal: 200, 404, 500) dan body JSON.
+      // =================================================================
+      if (kDebugMode) {
+        print('--- 📬 [API GET Response] 📬 ---');
+        print('Status Code: ${response.statusCode}');
+        print('Body: ${response.body}');
+        print('--------------------------');
+      }
+      // =================================================================
 
       final data = _handleResponse(response);
 
@@ -122,7 +152,17 @@ class ApiService {
     } on FormatException {
       throw Exception('Respons server tidak valid');
     } catch (e) {
-      throw Exception('Terjadi kesalahan: ${e.toString()}');
+      // =================================================================
+      // KOMENTAR: Logging tambahan untuk menangkap error yang mungkin terjadi.
+      // =================================================================
+      if (kDebugMode) {
+        print('--- ❌ [API GET Error]: General Catch ---');
+        print(e.toString());
+      }
+      // =================================================================
+      throw Exception(
+        'Terjadi kesalahan: ${e.toString().replaceAll("Exception: ", "")}',
+      );
     }
   }
 
@@ -288,6 +328,20 @@ class ApiService {
         throw Exception('Terjadi kesalahan tidak terduga');
     }
   }
+
+  // =================================================================
+  // PENAMBAHAN METHOD BARU UNTUK TRANSKRIP
+  // =================================================================
+  Future<TranskripModel> getTranskrip(String nrm) async {
+    // Endpoint bisa disesuaikan dengan API Anda, contoh: '/api/akademik/transkrip'
+    final data = await get('/api/akademik/mahasiswa/transkrip');
+    if (data['success']) {
+      return TranskripModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Failed to get transcript data');
+    }
+  }
+  // =================================================================
 
   // Clean up resources
   static void dispose() {

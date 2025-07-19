@@ -56,7 +56,7 @@ const wisakaDbConfig: DatabaseConfig = {
   port: parseInt(process.env.DB_WISAKA_PORT || "3306"),
   user: process.env.DB_WISAKA_USER || "root",
   password: process.env.DB_WISAKA_PASSWORD || "",
-  database: process.env.DB_WISAKA_NAME || "u4714151_wisaka",
+  database: process.env.DB_WISAKA_NAME || "wirahusada_wisaka",
   connectionLimit: 10,
   acquireTimeout: 60000,
   timeout: 60000,

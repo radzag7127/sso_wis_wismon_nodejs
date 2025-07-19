@@ -1,23 +1,22 @@
+// src/routes/akademikRoutes.ts
+
 import { Router } from 'express';
 import { AkademikController } from '../controllers/akademikController';
-import { authenticateToken } from "../utils/auth";
+import { authenticateToken } from '../utils/auth'; // Pastikan authenticateToken di-import
 
 const router = Router();
 const akademikController = new AkademikController();
 
-// // Rute untuk mendapatkan daftar semua mahasiswa
-// router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa);
-// // Rute untuk mendapatkan transkrip lengkap mahasiswa
-// router.get('/mahasiswa/:nrm/transkrip', akademikController.getTranskrip);
-// // Rute untuk mendapatkan KHS per semester
-// router.get('/mahasiswa/:nrm/khs/:semester', akademikController.getKhs);
-// // Rute untuk mendapatkan KRS per semester
-// router.get('/mahasiswa/:nrm/krs/:semester', akademikController.getKrs);
+// Rute untuk mendapatkan daftar semua mahasiswa (contoh rute publik)
+router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa); //palingan gak dipakai, bisa dihapus harusnya?
 
-// --- RUTE BARU UNTUK MENGAMBIL DAFTAR SEMESTER ---
-router.get('/krs-semesters', authenticateToken, akademikController.getAvailableKrsSemesters);
+// Rute untuk mendapatkan transkrip mahasiswa
+router.get('/mahasiswa/transkrip', authenticateToken, akademikController.getTranskrip);
 
-// --- PERUBAHAN RUTE KRS UNTUK MENERIMA PARAMETER TAHUN ---
-router.get('/krs/:tahun', authenticateToken, akademikController.getKrs);
+// Rute untuk mendapatkan KHS per semester
+router.get('/mahasiswa/:nrm/khs/:semester', authenticateToken, akademikController.getKhs);
+
+// Rute untuk mendapatkan KRS per semester
+router.get('/mahasiswa/:nrm/khs/:semester', authenticateToken, akademikController.getKrs);
 
 export default router;

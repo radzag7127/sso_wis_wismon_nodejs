@@ -10,6 +10,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
 import 'package:wismon_keuangan/core/services/api_service.dart';
 import 'package:wismon_keuangan/features/krs/presentation/pages/krs_page.dart';
+
+import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_page.dart';
+
+import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart'; // Import AuthState
 // ------------------------------------
 
 class MenuPage extends StatelessWidget {
@@ -193,7 +197,24 @@ class MenuPage extends StatelessWidget {
               title: 'Transkrip Nilai',
               subtitle: 'Dokumen resmi riwayat akademik lengkap Anda.',
               onTap: () {
-                _showComingSoonSnackBar(context, 'Transkrip Nilai');
+                final authState = context.read<AuthBloc>().state;
+                if (authState is AuthAuthenticated) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TranskripPage(nrm: authState.user.nrm),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Tidak dapat memuat data pengguna. Silakan login kembali.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
             ),
             const SizedBox(height: 16),
