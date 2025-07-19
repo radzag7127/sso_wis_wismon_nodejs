@@ -4,9 +4,6 @@ import 'package:dartz/dartz.dart';
 import 'package:wismon_keuangan/core/error/failures.dart';
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 
-// FILE INI SEHARUSNYA HANYA BERISI ABSTRACT CLASS UNTUK REPOSITORY
-// Definisi entity Transkrip dan Course sudah dipindahkan ke file entities/transkrip.dart
-
 abstract class TranskripRepository {
-  Future<Either<Failure, Transkrip>> getTranskrip(String nrm);
+  Future<Either<Failure, Transkrip>> getTranskrip();
 }

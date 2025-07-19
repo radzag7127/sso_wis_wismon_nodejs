@@ -13,11 +13,9 @@ class TranskripRepositoryImpl implements TranskripRepository {
   TranskripRepositoryImpl({required this.apiService});
 
   @override
-  Future<Either<Failure, Transkrip>> getTranskrip(String nrm) async {
+  Future<Either<Failure, Transkrip>> getTranskrip() async {
     try {
-      // Memanggil method getTranskrip dari ApiService yang sudah ditambahkan
-      final TranskripModel transkripModel = await apiService.getTranskrip(nrm);
-      // Mengembalikan object Transkrip (entity)
+      final TranskripModel transkripModel = await apiService.getTranskrip();
       return Right(transkripModel);
     } catch (e) {
       return Left(ServerFailure(e.toString().replaceAll('Exception: ', '')));

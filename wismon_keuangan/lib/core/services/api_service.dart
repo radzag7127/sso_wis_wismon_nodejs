@@ -332,7 +332,7 @@ class ApiService {
   // =================================================================
   // PENAMBAHAN METHOD BARU UNTUK TRANSKRIP
   // =================================================================
-  Future<TranskripModel> getTranskrip(String nrm) async {
+  Future<TranskripModel> getTranskrip() async {
     // Endpoint bisa disesuaikan dengan API Anda, contoh: '/api/akademik/transkrip'
     final data = await get('/api/akademik/mahasiswa/transkrip');
     if (data['success']) {

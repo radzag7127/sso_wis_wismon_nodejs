@@ -9,15 +9,14 @@ import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_e
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_state.dart';
 
 class TranskripPage extends StatelessWidget {
-  final String nrm;
-  const TranskripPage({super.key, required this.nrm});
+  // REVISI: Tidak perlu lagi menerima NRM di constructor
+  const TranskripPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      // Membuat instance TranskripBloc dan langsung memanggil event FetchTranskrip
-      create: (context) =>
-          di.sl<TranskripBloc>()..add(FetchTranskrip(nrm: nrm)),
+      // REVISI: Event yang dipanggil adalah FetchTranskrip() tanpa parameter
+      create: (context) => di.sl<TranskripBloc>()..add(const FetchTranskrip()),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Transkrip Akademik'),
@@ -41,7 +40,6 @@ class TranskripPage extends StatelessWidget {
                 ),
               );
             }
-            // State awal atau state lain yang tidak terduga
             return const Center(
               child: Text("Memulai untuk memuat transkrip..."),
             );
@@ -52,6 +50,7 @@ class TranskripPage extends StatelessWidget {
   }
 
   Widget _buildTranskripContent(BuildContext context, Transkrip transkrip) {
+    // ... (UI untuk menampilkan konten transkrip tidak perlu diubah)
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
@@ -63,6 +62,7 @@ class TranskripPage extends StatelessWidget {
   }
 
   Widget _buildSummary(BuildContext context, int totalSks, String ipk) {
+    // ... (UI untuk summary tidak perlu diubah)
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -114,10 +114,11 @@ class TranskripPage extends StatelessWidget {
   }
 
   Widget _buildCourseList(BuildContext context, List<Course> courses) {
+    // ... (UI untuk daftar mata kuliah tidak perlu diubah)
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias, // Agar DataTable tidak keluar dari Card
+      clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
@@ -147,7 +148,7 @@ class TranskripPage extends StatelessWidget {
               cells: [
                 DataCell(
                   SizedBox(
-                    width: 150, // Memberi lebar agar tidak terlalu sempit
+                    width: 150,
                     child: Text(course.namamk, overflow: TextOverflow.ellipsis),
                   ),
                 ),

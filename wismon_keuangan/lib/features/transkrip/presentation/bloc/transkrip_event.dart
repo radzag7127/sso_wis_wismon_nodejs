@@ -1,4 +1,5 @@
 // lib/features/transkrip/presentation/bloc/transkrip_event.dart
+
 import 'package:equatable/equatable.dart';
 
 abstract class TranskripEvent extends Equatable {
@@ -8,11 +9,7 @@ abstract class TranskripEvent extends Equatable {
   List<Object> get props => [];
 }
 
+// REVISI: Event FetchTranskrip tidak lagi membawa NRM
 class FetchTranskrip extends TranskripEvent {
-  final String nrm;
-
-  const FetchTranskrip({required this.nrm});
-
-  @override
-  List<Object> get props => [nrm];
+  const FetchTranskrip();
 }

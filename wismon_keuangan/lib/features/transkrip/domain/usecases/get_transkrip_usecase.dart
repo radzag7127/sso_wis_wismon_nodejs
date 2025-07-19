@@ -6,14 +6,15 @@ import 'package:wismon_keuangan/core/usecases/usecase.dart';
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 import 'package:wismon_keuangan/features/transkrip/domain/repositories/transkrip_repository.dart';
 
-class GetTranskripUseCase implements UseCase<Transkrip, String> {
+class GetTranskripUseCase implements UseCase<Transkrip, NoParams> {
   final TranskripRepository repository;
 
   GetTranskripUseCase(this.repository);
 
+  // Kode ini sekarang sudah valid karena repository.getTranskrip()
+  // tidak lagi memerlukan argumen.
   @override
-  Future<Either<Failure, Transkrip>> call(String params) async {
-    // params di sini adalah nrm
-    return await repository.getTranskrip(params);
+  Future<Either<Failure, Transkrip>> call(NoParams params) async {
+    return await repository.getTranskrip();
   }
 }

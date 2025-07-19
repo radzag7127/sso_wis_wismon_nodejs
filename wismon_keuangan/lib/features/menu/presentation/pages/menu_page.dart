@@ -191,32 +191,23 @@ class MenuPage extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
+            // =================================================================
+            // REVISI LOGIKA onTap UNTUK TRANSKRIP
+            // =================================================================
             _buildMenuItem(
               context: context,
               icon: Icons.description_outlined,
               title: 'Transkrip Nilai',
               subtitle: 'Dokumen resmi riwayat akademik lengkap Anda.',
               onTap: () {
-                final authState = context.read<AuthBloc>().state;
-                if (authState is AuthAuthenticated) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TranskripPage(nrm: authState.user.nrm),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Tidak dapat memuat data pengguna. Silakan login kembali.',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                // Navigasi ke TranskripPage tidak lagi memerlukan NRM
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TranskripPage()),
+                );
               },
             ),
+            // =================================================================
             const SizedBox(height: 16),
             _buildMenuItem(
               context: context,
