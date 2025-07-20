@@ -1,4 +1,4 @@
-// File: lib/features/krs/data/repositories/krs_repository_impl.dart
+// lib/features/krs/data/repositories/krs_repository_impl.dart
 
 import 'package:dartz/dartz.dart';
 import '../../../../core/error/failures.dart';
@@ -12,9 +12,9 @@ class KrsRepositoryImpl implements KrsRepository {
   KrsRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<Either<Failure, Krs>> getKrs(int semesterKe, int jenisSemester) async {
+  Future<Either<Failure, Krs>> getKrs(int semesterKe) async {
     try {
-      final krsModel = await remoteDataSource.getKrs(semesterKe, jenisSemester);
+      final krsModel = await remoteDataSource.getKrs(semesterKe);
       return Right(krsModel);
     } catch (e) {
       return Left(ServerFailure(e.toString().replaceAll('Exception: ', '')));

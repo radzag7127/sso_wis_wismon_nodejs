@@ -1,4 +1,4 @@
-// File: lib/features/krs/presentation/pages/krs_page.dart
+// lib/features/krs/presentation/pages/krs_page.dart
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,79 +6,84 @@ import '../../../../core/di/injection_container.dart' as di;
 import '../../domain/entities/krs.dart';
 import '../bloc/krs_bloc.dart';
 
-class KrsPage extends StatefulWidget {
+// No longer a StatefulWidget, can be a StatelessWidget
+class KrsPage extends StatelessWidget {
   const KrsPage({super.key});
-
-  @override
-  State<KrsPage> createState() => _KrsPageState();
-}
-
-class _KrsPageState extends State<KrsPage> {
-  // Hanya satu state untuk semester yang dipilih
-  int _selectedSemester = 1;
-
-  final List<int> _semesters = List.generate(14, (index) => index + 1);
-
-  // Fungsi untuk mengambil data dari BLoC
-  void _fetchData() {
-    // Logika untuk menentukan jenis semester secara otomatis
-    // Jika semester ganjil (1, 3, 5, ...), jenisSemester = 1 (Ganjil)
-    // Jika semester genap (2, 4, 6, ...), jenisSemester = 2 (Genap)
-    final int jenisSemester = (_selectedSemester % 2 == 0) ? 2 : 1;
-
-    context.read<KrsBloc>().add(
-      FetchKrsData(semesterKe: _selectedSemester, jenisSemester: jenisSemester),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) {
-        // Ambil data untuk semester 1 saat halaman pertama kali dibuka
-        final int initialJenisSemester = (_selectedSemester % 2 == 0) ? 2 : 1;
-        return di.sl<KrsBloc>()..add(
-          FetchKrsData(
-            semesterKe: _selectedSemester,
-            jenisSemester: initialJenisSemester,
-          ),
-        );
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Kartu Rencana Studi'),
-          backgroundColor: const Color(0xFF135EA2),
-          foregroundColor: Colors.white,
-        ),
-        body: Column(
-          children: [
-            _buildFilterSection(),
-            Expanded(
-              child: BlocBuilder<KrsBloc, KrsState>(
-                builder: (context, state) {
-                  if (state is KrsLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  } else if (state is KrsLoaded) {
-                    return _buildKrsContent(context, state.krs);
-                  } else if (state is KrsError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(
-                          'Gagal memuat data: ${state.message}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+      create: (context) => di.sl<KrsBloc>(), // Create the BLoC here
+      child: const KrsView(), // The view is now a separate widget
+    );
+  }
+}
+
+class KrsView extends StatefulWidget {
+  const KrsView({super.key});
+
+  @override
+  State<KrsView> createState() => _KrsViewState();
+}
+
+class _KrsViewState extends State<KrsView> {
+  int _selectedSemester = 1;
+  final List<int> _semesters = List.generate(14, (index) => index + 1);
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch initial data when the widget is first created
+    _fetchData();
+  }
+
+  void _fetchData() {
+    context.read<KrsBloc>().add(FetchKrsData(semesterKe: _selectedSemester));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Kartu Rencana Studi'),
+        backgroundColor: const Color(0xFF135EA2),
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          _buildFilterSection(),
+          Expanded(
+            child: BlocBuilder<KrsBloc, KrsState>(
+              builder: (context, state) {
+                if (state is KrsLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (state is KrsLoaded) {
+                  return _buildKrsContent(context, state.krs);
+                } else if (state is KrsError) {
+                  if (state.message.toLowerCase().contains(
+                    'tidak ada data krs ditemukan',
+                  )) {
+                    return const Center(
+                      child: Text("Tidak ada data KRS untuk semester ini."),
                     );
                   }
-                  return const Center(
-                    child: Text("Pilih semester untuk memulai."),
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'Gagal memuat data: ${state.message}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   );
-                },
-              ),
+                }
+                return const Center(
+                  child: Text("Pilih semester untuk memulai."),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -94,7 +99,6 @@ class _KrsPageState extends State<KrsPage> {
           border: OutlineInputBorder(),
         ),
         items: _semesters.map((int value) {
-          // Menampilkan keterangan Ganjil/Genap di dropdown
           final String jenis = (value % 2 == 0) ? 'Genap' : 'Ganjil';
           return DropdownMenuItem<int>(
             value: value,
@@ -106,7 +110,7 @@ class _KrsPageState extends State<KrsPage> {
             setState(() {
               _selectedSemester = newValue;
             });
-            _fetchData(); // Panggil fungsi untuk mengambil data
+            _fetchData();
           }
         },
       ),

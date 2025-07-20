@@ -112,14 +112,16 @@ export class AkademikService {
 
   /**
    * Mengambil Kartu Rencana Studi (KRS) per semester.
-   * Query ini diperbaiki untuk menggunakan `krs.tahun` sebagai acuan join yang benar.
+   * Query ini diperbaiki untuk menggunakan krs.tahun sebagai acuan join yang benar.
+   * REVISED: This function now only requires semesterKe.
    */
-  async getKrs(nrm: string, semesterKe: number, jenisSemester: number): Promise<Krs> {
-    // ===== PERBAIKAN FINAL PADA QUERY =====
-    // Mengubah kondisi JOIN `krs_mk.tahun` menjadi `krs.tahun` untuk memastikan
-    // pencocokan tahun ajaran yang akurat.
+  async getKrs(nrm: string, semesterKe: number): Promise<Krs> {
+    // Determine jenisSemester (1 for Ganjil, 2 for Genap) based on semesterKe
+    const jenisSemester = semesterKe % 2 === 0 ? 2 : 1;
+
+    // The SQL query remains the same but uses the internally derived jenisSemester
     const query = `
-      SELECT 
+      SELECT
         krs.semesterke AS semesterKe,
         krs.semester AS jenisSemesterKode,
         krs.tahun AS tahunAjaran,
@@ -127,33 +129,30 @@ export class AkademikService {
         mk.namamk AS namaMataKuliah,
         mk.sks AS sks,
         kls_mhs.nama AS kelas
-      FROM 
-        krs
-      JOIN 
-        krsmatakuliah AS krs_mk ON krs.nrm = krs_mk.nrm 
-                                AND krs.semesterke = krs_mk.semesterke 
-                                AND krs.semester = krs_mk.semesterkrs
-      JOIN 
-        matakuliah AS mk ON krs_mk.kdmk = mk.kdmk 
-                         AND krs_mk.kurikulum = mk.kurikulum
-      LEFT JOIN 
-        kelasmahasiswa AS kls_mhs ON krs_mk.nrm = kls_mhs.nrm
-                                  AND krs.tahun = kls_mhs.tahun
-                                  AND krs_mk.semesterkrs = kls_mhs.semester
-                                  AND krs_mk.kdmk = kls_mhs.kdmk
-                                  AND krs_mk.kurikulum = kls_mhs.kurikulum
-      WHERE 
-        krs.nrm = ? 
-        AND krs.semesterke = ? 
+      FROM krs
+      JOIN krsmatakuliah AS krs_mk ON krs.nrm = krs_mk.nrm
+        AND krs.semesterke = krs_mk.semesterke
+        AND krs.semester = krs_mk.semesterkrs
+        AND krs.tahun = krs_mk.tahun
+      JOIN matakuliah AS mk ON krs_mk.kdmk = mk.kdmk
+        AND krs_mk.kurikulum = mk.kurikulum
+      LEFT JOIN kelasmahasiswa AS kls_mhs ON krs_mk.nrm = kls_mhs.nrm
+        AND krs.tahun = kls_mhs.tahun
+        AND krs_mk.semesterkrs = kls_mhs.semester
+        AND krs_mk.kdmk = kls_mhs.kdmk
+        AND krs_mk.kurikulum = kls_mhs.kurikulum
+      WHERE
+        krs.nrm = ?
+        AND krs.semesterke = ?
         AND krs.semester = ?
-      ORDER BY 
+      ORDER BY
         mk.kdmk;
     `;
 
     const krsData = (await executeWisakaQuery(query, [nrm, semesterKe, jenisSemester])) as any[];
 
     if (krsData.length === 0) {
-      throw new Error(`Tidak ada data KRS ditemukan untuk semester yang diminta.`);
+      throw new Error("Tidak ada data KRS ditemukan untuk semester yang diminta.");
     }
 
     const getJenisSemesterText = (kode: number): string => {

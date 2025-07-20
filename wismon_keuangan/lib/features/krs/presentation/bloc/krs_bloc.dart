@@ -1,8 +1,8 @@
-// File: lib/features/krs/presentation/bloc/krs_bloc.dart
+// lib/features/krs/presentation/bloc/krs_bloc.dart
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import '../../../../core/error/failures.dart'; // Pastikan ini diimpor
+import '../../../../core/error/failures.dart';
 import '../../domain/entities/krs.dart';
 import '../../domain/usecases/get_krs_usecase.dart';
 
@@ -21,21 +21,13 @@ class KrsBloc extends Bloc<KrsEvent, KrsState> {
     Emitter<KrsState> emit,
   ) async {
     emit(KrsLoading());
-    final result = await getKrsUseCase(
-      KrsParams(
-        semesterKe: event.semesterKe,
-        jenisSemester: event.jenisSemester,
-      ),
-    );
-
+    final result = await getKrsUseCase(KrsParams(semesterKe: event.semesterKe));
     result.fold(
-      // PERBAIKAN: Gunakan helper function untuk mendapatkan pesan error
       (failure) => emit(KrsError(message: _mapFailureToMessage(failure))),
       (krs) => emit(KrsLoaded(krs: krs)),
     );
   }
 
-  // PENAMBAHAN: Helper function untuk memetakan Failure ke pesan String
   String _mapFailureToMessage(Failure failure) {
     switch (failure.runtimeType) {
       case ServerFailure:
@@ -45,7 +37,7 @@ class KrsBloc extends Bloc<KrsEvent, KrsState> {
       case CacheFailure:
         return (failure as CacheFailure).message;
       default:
-        return 'Terjadi kesalahan yang tidak terduga';
+        return 'Unexpected error occurred';
     }
   }
 }

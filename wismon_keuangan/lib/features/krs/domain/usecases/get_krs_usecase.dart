@@ -1,4 +1,4 @@
-// File: lib/features/krs/domain/usecases/get_krs_usecase.dart
+// lib/features/krs/domain/usecases/get_krs_usecase.dart
 
 import 'package:dartz/dartz.dart';
 import 'package:equatable/equatable.dart';
@@ -14,16 +14,15 @@ class GetKrsUseCase implements UseCase<Krs, KrsParams> {
 
   @override
   Future<Either<Failure, Krs>> call(KrsParams params) async {
-    return await repository.getKrs(params.semesterKe, params.jenisSemester);
+    return await repository.getKrs(params.semesterKe);
   }
 }
 
 class KrsParams extends Equatable {
   final int semesterKe;
-  final int jenisSemester;
 
-  const KrsParams({required this.semesterKe, required this.jenisSemester});
+  const KrsParams({required this.semesterKe});
 
   @override
-  List<Object> get props => [semesterKe, jenisSemester];
+  List<Object> get props => [semesterKe];
 }

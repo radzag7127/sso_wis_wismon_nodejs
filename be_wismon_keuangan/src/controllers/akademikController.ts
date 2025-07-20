@@ -86,55 +86,47 @@ export class AkademikController {
 
   async getKrs(req: Request, res: Response): Promise<void> {
     try {
-      // 1. Ambil data pengguna dari token
       const user = (req as any).user as JWTPayload;
       if (!user || !user.nrm) {
         res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
         return;
       }
       const nrm = user.nrm;
+      
+      const { semesterKe } = req.query;
 
-      // 2. Ambil parameter dari query string (bukan params)
-      const { semesterKe, jenisSemester } = req.query;
-
-      // 3. Validasi input
-      if (!semesterKe || !jenisSemester) {
+      if (!semesterKe) {
         res.status(400).json({
           success: false,
-          message: 'Parameter `semesterKe` dan `jenisSemester` wajib diisi pada query URL.',
+          message: 'Parameter semesterKe wajib diisi pada query URL.',
         });
         return;
       }
 
       const semesterKeNum = parseInt(semesterKe as string, 10);
-      const jenisSemesterNum = parseInt(jenisSemester as string, 10);
-
-      if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
+      if (isNaN(semesterKeNum)) {
         res.status(400).json({
           success: false,
-          message: 'Parameter `semesterKe` dan `jenisSemester` harus berupa angka.',
+          message: 'Parameter semesterKe harus berupa angka.',
         });
         return;
       }
 
-      // 4. Panggil service dengan parameter yang sudah disesuaikan
-      const data = await akademikService.getKrs(nrm, semesterKeNum, jenisSemesterNum);
+      // Call the service with the simplified parameters
+      const data = await akademikService.getKrs(nrm, semesterKeNum);
 
-      // 5. Kirim respon sukses dengan seluruh data Krs
       res.status(200).json({
         success: true,
         message: 'Data KRS berhasil diambil',
         data: data,
       });
-
     } catch (error) {
-      // 6. Tangani error secara konsisten
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
       res.status(statusCode).json({
         success: false,
         message: 'Gagal mengambil data KRS',
-        errors: [errorMessage]
+        errors: [errorMessage],
       });
     }
   }
