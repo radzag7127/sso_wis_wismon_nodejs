@@ -226,32 +226,12 @@ class MenuPage extends StatelessWidget {
               icon: Icons.edit_note_outlined,
               title: 'Kartu Rencana Studi (KRS)',
               subtitle: 'Rencanakan dan pilih mata kuliah selama perkuliahan.',
-              onTap: () async {
-                // Mengambil instance ApiService dari service locator (GetIt).
-                final apiService = di.sl<ApiService>();
-                // Mengambil token otentikasi yang tersimpan.
-                final token = await apiService.getAuthToken();
-
-                // Pastikan widget masih ada di tree sebelum melakukan navigasi.
-                if (context.mounted) {
-                  if (token != null) {
-                    // Jika token ada, navigasi ke KrsPage dengan membawa token.
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => KrsPage(token: token)),
-                    );
-                  } else {
-                    // Jika token tidak ada (misal, sesi berakhir), tampilkan pesan error.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Sesi Anda telah berakhir. Silakan login kembali.',
-                        ),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
+              onTap: () {
+                // Navigasi ke halaman KRS yang baru
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KrsPage()),
+                );
               },
             ),
             const SizedBox(height: 16),

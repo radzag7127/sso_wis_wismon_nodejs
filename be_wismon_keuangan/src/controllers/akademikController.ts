@@ -2,7 +2,8 @@
 
 import { Request, Response } from 'express';
 import { AkademikService } from '../services/akademikService';
-import { ApiResponse } from '../types';
+import { ApiResponse, JWTPayload } from '../types';
+
 
 const akademikService = new AkademikService();
 
@@ -84,27 +85,57 @@ export class AkademikController {
   }
 
   async getKrs(req: Request, res: Response): Promise<void> {
-    const user = (req as any).user;
-    const { tahun } = req.params;
-    if (!user || !user.nrm) {
-      res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
-      return;
-    }
-    if (!tahun) {
-      res.status(400).json({ success: false, message: 'Parameter tahun ajaran dibutuhkan.' });
-      return;
-    }
     try {
-      const data = await akademikService.getKrs(user.nrm, tahun);
+      // 1. Ambil data pengguna dari token
+      const user = (req as any).user as JWTPayload;
+      if (!user || !user.nrm) {
+        res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
+        return;
+      }
+      const nrm = user.nrm;
+
+      // 2. Ambil parameter dari query string (bukan params)
+      const { semesterKe, jenisSemester } = req.query;
+
+      // 3. Validasi input
+      if (!semesterKe || !jenisSemester) {
+        res.status(400).json({
+          success: false,
+          message: 'Parameter `semesterKe` dan `jenisSemester` wajib diisi pada query URL.',
+        });
+        return;
+      }
+
+      const semesterKeNum = parseInt(semesterKe as string, 10);
+      const jenisSemesterNum = parseInt(jenisSemester as string, 10);
+
+      if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
+        res.status(400).json({
+          success: false,
+          message: 'Parameter `semesterKe` dan `jenisSemester` harus berupa angka.',
+        });
+        return;
+      }
+
+      // 4. Panggil service dengan parameter yang sudah disesuaikan
+      const data = await akademikService.getKrs(nrm, semesterKeNum, jenisSemesterNum);
+
+      // 5. Kirim respon sukses dengan seluruh data Krs
       res.status(200).json({
         success: true,
-        message: `Data KRS untuk tahun ajaran ${tahun} berhasil diambil`,
-        data: data.courses,
+        message: 'Data KRS berhasil diambil',
+        data: data,
       });
+
     } catch (error) {
+      // 6. Tangani error secara konsisten
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const statusCode = errorMessage.includes('ditemukan') ? 404 : 500;
-      res.status(statusCode).json({ success: false, message: 'Gagal mengambil KRS', errors: [errorMessage] });
+      const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
+      res.status(statusCode).json({
+        success: false,
+        message: 'Gagal mengambil data KRS',
+        errors: [errorMessage]
+      });
     }
   }
 }

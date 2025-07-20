@@ -1,6 +1,6 @@
-// lib/features/krs/presentation/bloc/krs_state.dart
-import 'package:equatable/equatable.dart';
-import '../../domain/entities/krs.dart';
+// File: lib/features/krs/presentation/bloc/krs_state.dart
+
+part of 'krs_bloc.dart';
 
 abstract class KrsState extends Equatable {
   const KrsState();
@@ -14,49 +14,18 @@ class KrsInitial extends KrsState {}
 class KrsLoading extends KrsState {}
 
 class KrsLoaded extends KrsState {
-  final List<Krs> krsList;
-  final List<String> availableSemesters;
-  final String selectedSemester;
-  final int totalSks;
-  final bool isLoading; // --- TAMBAHKAN PROPERTI INI ---
+  final Krs krs;
 
-  const KrsLoaded({
-    required this.krsList,
-    required this.availableSemesters,
-    required this.selectedSemester,
-    required this.totalSks,
-    this.isLoading = false, // --- TAMBAHKAN NILAI DEFAULT ---
-  });
+  const KrsLoaded({required this.krs});
 
   @override
-  List<Object?> get props => [
-    krsList,
-    availableSemesters,
-    selectedSemester,
-    totalSks,
-    isLoading, // --- TAMBAHKAN KE PROPS ---
-  ];
-
-  KrsLoaded copyWith({
-    List<Krs>? krsList,
-    List<String>? availableSemesters,
-    String? selectedSemester,
-    int? totalSks,
-    bool? isLoading, // --- TAMBAHKAN PARAMETER INI ---
-  }) {
-    return KrsLoaded(
-      krsList: krsList ?? this.krsList,
-      availableSemesters: availableSemesters ?? this.availableSemesters,
-      selectedSemester: selectedSemester ?? this.selectedSemester,
-      totalSks: totalSks ?? this.totalSks,
-      isLoading: isLoading ?? this.isLoading, // --- TAMBAHKAN LOGIKA INI ---
-    );
-  }
+  List<Object?> get props => [krs];
 }
 
 class KrsError extends KrsState {
   final String message;
-  const KrsError(this.message);
+
+  const KrsError({required this.message});
 
   @override
   List<Object> get props => [message];

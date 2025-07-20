@@ -1,18 +1,45 @@
-// lib/features/krs/domain/entities/krs.dart
+// File: lib/features/krs/domain/entities/krs.dart
 
-class Krs {
-  final String kode;
-  final String nama;
+import 'package:equatable/equatable.dart';
+
+class Krs extends Equatable {
+  final int semesterKe;
+  final String jenisSemester;
+  final String tahunAjaran;
+  final List<KrsCourse> mataKuliah;
+  final int totalSks;
+
+  const Krs({
+    required this.semesterKe,
+    required this.jenisSemester,
+    required this.tahunAjaran,
+    required this.mataKuliah,
+    required this.totalSks,
+  });
+
+  @override
+  List<Object?> get props => [
+    semesterKe,
+    jenisSemester,
+    tahunAjaran,
+    mataKuliah,
+    totalSks,
+  ];
+}
+
+class KrsCourse extends Equatable {
+  final String kodeMataKuliah;
+  final String namaMataKuliah;
   final int sks;
+  final String? kelas;
 
-  Krs({required this.kode, required this.nama, required this.sks});
+  const KrsCourse({
+    required this.kodeMataKuliah,
+    required this.namaMataKuliah,
+    required this.sks,
+    this.kelas,
+  });
 
-  // TAMBAHKAN FACTORY CONSTRUCTOR INI
-  factory Krs.fromJson(Map<String, dynamic> json) {
-    return Krs(
-      kode: json['kode'] as String? ?? '',
-      nama: json['nama'] as String? ?? '',
-      sks: json['sks'] as int? ?? 0,
-    );
-  }
+  @override
+  List<Object?> get props => [kodeMataKuliah, namaMataKuliah, sks, kelas];
 }

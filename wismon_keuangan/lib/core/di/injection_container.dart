@@ -14,11 +14,12 @@ import '../../features/payment/domain/usecases/get_payment_summary_usecase.dart'
 import '../../features/payment/domain/usecases/get_transaction_detail_usecase.dart';
 import '../../features/payment/presentation/bloc/payment_bloc.dart';
 
-// --- IMPORT UNTUK FITUR KRS ---
+// IMPORT BARU UNTUK FITUR KRS
+import '../../features/krs/data/datasources/krs_remote_data_source.dart';
 import '../../features/krs/data/repositories/krs_repository_impl.dart';
 import '../../features/krs/domain/repositories/krs_repository.dart';
-import '../../features/krs/domain/usecases/get_krs.dart';
-import '../../features/krs/presentation/bloc/krs_cubit.dart';
+import '../../features/krs/domain/usecases/get_krs_usecase.dart';
+import '../../features/krs/presentation/bloc/krs_bloc.dart';
 
 // --- IMPORT UNTUK FITUR TRANSKRIP ---
 import 'package:wismon_keuangan/features/transkrip/data/repositories/transkrip_repository_impl.dart';
@@ -81,17 +82,19 @@ Future<void> init() async {
   sl.registerFactory(() => TranskripBloc(getTranskripUseCase: sl()));
 
   // --- BLOK BARU UNTUK FITUR KRS ---
-  // KRS Feature
-  sl.registerLazySingleton<KrsRepository>(
-  () => KrsRepositoryImpl(baseUrl: ApiService.baseUrl), 
-  );
+  // Bloc
+  sl.registerFactory(() => KrsBloc(getKrsUseCase: sl()));
 
   // Use cases
-  sl.registerLazySingleton(() => GetKrs(sl()));
+  sl.registerLazySingleton(() => GetKrsUseCase(sl()));
 
-  // Cubit
-  sl.registerFactory(
-    // --- PERUBAHAN DI SINI ---
-    () => KrsCubit(getKrs: sl(), krsRepository: sl()),
+  // Repository
+  sl.registerLazySingleton<KrsRepository>(
+    () => KrsRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // Data sources
+  sl.registerLazySingleton<KrsRemoteDataSource>(
+    () => KrsRemoteDataSourceImpl(apiService: sl()),
   );
 }

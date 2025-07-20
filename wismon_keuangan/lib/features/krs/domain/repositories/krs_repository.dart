@@ -1,10 +1,9 @@
-// lib/features/krs/domain/repositories/krs_repository.dart
+// File: lib/features/krs/domain/repositories/krs_repository.dart
+
+import 'package:dartz/dartz.dart';
+import '../../../../core/error/failures.dart';
 import '../entities/krs.dart';
 
 abstract class KrsRepository {
-  // Method baru untuk mengambil daftar semester
-  Future<List<String>> getAvailableSemesters(String token);
-
-  // Method lama diubah untuk menerima semester
-  Future<List<Krs>> getKrs(String token, String semester);
+  Future<Either<Failure, Krs>> getKrs(int semesterKe, int jenisSemester);
 }

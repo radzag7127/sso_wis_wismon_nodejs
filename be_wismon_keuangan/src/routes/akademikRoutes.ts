@@ -17,6 +17,6 @@ router.get('/mahasiswa/transkrip', authenticateToken, akademikController.getTran
 router.get('/mahasiswa/:nrm/khs/:semester', authenticateToken, akademikController.getKhs);
 
 // Rute untuk mendapatkan KRS per semester
-router.get('/mahasiswa/:nrm/khs/:semester', authenticateToken, akademikController.getKrs);
+router.get('/krs', authenticateToken, akademikController.getKrs);
 
 export default router;

@@ -142,15 +142,43 @@ export interface Transkrip {
   courses: Course[];
 }
 
+/**
+ * Interface untuk data JWT payload yang disimpan di dalam token.
+ * Digunakan untuk type safety saat mengakses data user dari token.
+ */
+export interface JWTPayload {
+  nrm: string;
+  nim: string;
+  namam: string;
+  iat?: number;
+  exp?: number;
+}
+
+/**
+ * Interface untuk satu mata kuliah yang ada di dalam KRS.
+ */
+export interface KrsCourse {
+  kodeMataKuliah: string;
+  namaMataKuliah: string;
+  sks: number;
+  kelas: string | null; // Kelas bisa jadi null jika tidak ada data kelas yang cocok
+}
+
+/**
+ * Interface untuk struktur data KRS yang akan dikirim sebagai respons API.
+ */
+export interface Krs {
+  semesterKe: number;
+  jenisSemester: string; // e.g., "Ganjil", "Genap"
+  tahunAjaran: string; // e.g., "2023/2024"
+  mataKuliah: KrsCourse[];
+  totalSks: number;
+}
+
 export interface Khs {
   ips: string;
   total_sks: number;
   courses: Course[];
-}
-
-export interface Krs {
-  total_sks: number;
-  courses: Pick<Course, 'namamk' | 'sks'>[];
 }
 
 export interface DaftarMahasiswa {
