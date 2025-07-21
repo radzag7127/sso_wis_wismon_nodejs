@@ -15,7 +15,7 @@ class KrsRemoteDataSourceImpl implements KrsRemoteDataSource {
   @override
   Future<KrsModel> getKrs(int semesterKe) async {
     // The endpoint now only requires semesterKe
-    final endpoint = '/api/akademik/krs?semesterKe=$semesterKe';
+    final endpoint = '/api/akademik/mahasiswa/krs?semesterKe=$semesterKe';
     final data = await apiService.get(endpoint);
     if (data['success']) {
       return KrsModel.fromJson(data['data']);

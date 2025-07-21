@@ -14,9 +14,9 @@ router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa); //paling
 router.get('/mahasiswa/transkrip', authenticateToken, akademikController.getTranskrip);
 
 // Rute untuk mendapatkan KHS per semester
-router.get('/mahasiswa/:nrm/khs/:semester', authenticateToken, akademikController.getKhs);
+router.get('/mahasiswa/khs', authenticateToken, akademikController.getKhs);
 
 // Rute untuk mendapatkan KRS per semester
-router.get('/krs', authenticateToken, akademikController.getKrs);
+router.get('/mahasiswa/krs', authenticateToken, akademikController.getKrs);
 
 export default router;

@@ -154,6 +154,9 @@ export interface JWTPayload {
   exp?: number;
 }
 
+
+
+// ITU KRSCOURSE SAMA KHSCOURSE REDUNDANT, MUNGKIN BAKALAN TAK BENERIN KALAU UDAH SELESAI
 /**
  * Interface untuk satu mata kuliah yang ada di dalam KRS.
  */
@@ -175,10 +178,36 @@ export interface Krs {
   totalSks: number;
 }
 
+/**
+ * Merepresentasikan satu mata kuliah dalam Kartu Hasil Studi (KHS).
+ */
+export interface KhsCourse {
+  nilai: string; // Nilai huruf (A, B, C, D, E)
+  kodeMataKuliah: string;
+  namaMataKuliah: string;
+  sks: number;
+  kelas: string | null;
+}
+
+/**
+* Merepresentasikan rekapitulasi perhitungan IP dan SKS.
+*/
+export interface Rekapitulasi {
+  ipSemester: string;      // Format: "Lulus / Beban" -> "3.50 / 3.25"
+  sksSemester: string;     // Format: "Lulus / Beban" -> "18 / 20"
+  ipKumulatif: string;     // Format: "Lulus / Beban"
+  sksKumulatif: string;    // Format: "Lulus / Beban"
+}
+
+/**
+* Merepresentasikan objek KHS secara keseluruhan yang akan dikirim sebagai respons.
+*/
 export interface Khs {
-  ips: string;
-  total_sks: number;
-  courses: Course[];
+  semesterKe: number;
+  jenisSemester: string;
+  tahunAjaran: string;
+  mataKuliah: KhsCourse[];
+  rekapitulasi: Rekapitulasi;
 }
 
 export interface DaftarMahasiswa {
