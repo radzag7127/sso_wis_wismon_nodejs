@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/data/models/user_model.dart';
 import '../../features/payment/data/models/payment_model.dart';
 
-// Import TranskripModel
+// Import Transkrip, KRS, KHS
 import '../../features/transkrip/data/models/transkrip_model.dart';
-import 'package:flutter/foundation.dart'; // Import for kDebugMode
+import '../../features/krs/data/models/krs_model.dart';
+import '../../features/khs/data/models/khs_model.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiService {
   // API Base URL
@@ -329,19 +331,33 @@ class ApiService {
     }
   }
 
-  // =================================================================
-  // PENAMBAHAN METHOD BARU UNTUK TRANSKRIP
-  // =================================================================
-  Future<TranskripModel> getTranskrip() async {
-    // Endpoint bisa disesuaikan dengan API Anda, contoh: '/api/akademik/transkrip'
-    final data = await get('/api/akademik/mahasiswa/transkrip');
-    if (data['success']) {
-      return TranskripModel.fromJson(data['data']);
+  // --- AKADEMIK METHODS ---
+  Future<KrsModel> getKrs(int semesterKe) async {
+    final data = await get('/api/mahasiswa/krs?semesterKe=$semesterKe');
+    if (data['success'] == true) {
+      return KrsModel.fromJson(data['data']);
     } else {
-      throw Exception(data['message'] ?? 'Failed to get transcript data');
+      throw Exception(data['message'] ?? 'Gagal mengambil data KRS');
     }
   }
-  // =================================================================
+
+  Future<KhsModel> getKhs(int semesterKe) async {
+    final data = await get('/api/mahasiswa/khs?semesterKe=$semesterKe');
+    if (data['success'] == true) {
+      return KhsModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Gagal mengambil data KHS');
+    }
+  }
+
+  Future<TranskripModel> getTranskrip() async {
+    final data = await get('/api/mahasiswa/transkrip');
+    if (data['success'] == true) {
+      return TranskripModel.fromJson(data['data']);
+    } else {
+      throw Exception(data['message'] ?? 'Gagal mengambil data transkrip');
+    }
+  }
 
   // Clean up resources
   static void dispose() {

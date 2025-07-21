@@ -21,6 +21,13 @@ import '../../features/krs/domain/repositories/krs_repository.dart';
 import '../../features/krs/domain/usecases/get_krs_usecase.dart';
 import '../../features/krs/presentation/bloc/krs_bloc.dart';
 
+// --- IMPORT BARU UNTUK FITUR KHS ---
+import '../../features/khs/data/datasources/khs_remote_data_source.dart';
+import '../../features/khs/data/repositories/khs_repository_impl.dart';
+import '../../features/khs/domain/repositories/khs_repository.dart';
+import '../../features/khs/domain/usecases/get_khs_usecase.dart';
+import '../../features/khs/presentation/bloc/khs_bloc.dart';
+
 // --- IMPORT UNTUK FITUR TRANSKRIP ---
 import 'package:wismon_keuangan/features/transkrip/data/repositories/transkrip_repository_impl.dart';
 import 'package:wismon_keuangan/features/transkrip/domain/repositories/transkrip_repository.dart';
@@ -97,4 +104,18 @@ Future<void> init() async {
   sl.registerLazySingleton<KrsRemoteDataSource>(
     () => KrsRemoteDataSourceImpl(apiService: sl()),
   );
+
+  // --- BLOK BARU UNTUK FITUR KHS ---
+  // Data sources
+  sl.registerLazySingleton<KhsRemoteDataSource>(
+    () => KhsRemoteDataSourceImpl(apiService: sl()),
+  );
+  // Repository
+  sl.registerLazySingleton<KhsRepository>(
+    () => KhsRepositoryImpl(remoteDataSource: sl()),
+  );
+  // Use cases
+  sl.registerLazySingleton(() => GetKhsUseCase(sl()));
+  // Bloc
+  sl.registerFactory(() => KhsBloc(getKhsUseCase: sl()));
 }

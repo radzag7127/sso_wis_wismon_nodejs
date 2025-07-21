@@ -5,16 +5,14 @@ import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_event.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-// --- IMPORT UNTUK FITUR KRS ---
-// Import ini diperlukan untuk mengakses service locator (GetIt) dan halaman KRS.
-import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
-import 'package:wismon_keuangan/core/services/api_service.dart';
+// IMPORT UNTUK FITUR KRS
 import 'package:wismon_keuangan/features/krs/presentation/pages/krs_page.dart';
 
+//IMPORT UNTUK TRANSKRIP
 import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_page.dart';
 
-import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart'; // Import AuthState
-// ------------------------------------
+//IMPORT UNTUK KHS
+import 'package:wismon_keuangan/features/khs/presentation/pages/khs_page.dart';
 
 class MenuPage extends StatelessWidget {
   const MenuPage({super.key});
@@ -207,15 +205,20 @@ class MenuPage extends StatelessWidget {
                 );
               },
             ),
-            // =================================================================
             const SizedBox(height: 16),
+
+            // --- PERBAIKAN DI SINI ---
             _buildMenuItem(
               context: context,
               icon: Icons.folder_open_outlined,
               title: 'Kartu Hasil Studi (KHS)',
               subtitle: 'Lihat nilai dan progres akademik Anda dengan mudah.',
               onTap: () {
-                _showComingSoonSnackBar(context, 'Kartu Hasil Studi');
+                // Mengarahkan ke halaman KHS
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KhsPage()),
+                );
               },
             ),
             const SizedBox(height: 16),
