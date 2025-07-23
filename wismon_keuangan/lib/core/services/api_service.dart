@@ -333,7 +333,9 @@ class ApiService {
 
   // --- AKADEMIK METHODS ---
   Future<KrsModel> getKrs(int semesterKe) async {
-    final data = await get('/api/mahasiswa/krs?semesterKe=$semesterKe');
+    final data = await get(
+      '/api/akademik/mahasiswa/krs?semesterKe=$semesterKe',
+    );
     if (data['success'] == true) {
       return KrsModel.fromJson(data['data']);
     } else {
@@ -342,7 +344,9 @@ class ApiService {
   }
 
   Future<KhsModel> getKhs(int semesterKe) async {
-    final data = await get('/api/mahasiswa/khs?semesterKe=$semesterKe');
+    final data = await get(
+      '/api/akademik/mahasiswa/khs?semesterKe=$semesterKe',
+    );
     if (data['success'] == true) {
       return KhsModel.fromJson(data['data']);
     } else {
@@ -351,7 +355,7 @@ class ApiService {
   }
 
   Future<TranskripModel> getTranskrip() async {
-    final data = await get('/api/mahasiswa/transkrip');
+    final data = await get('/api/akademik/mahasiswa/transkrip');
     if (data['success'] == true) {
       return TranskripModel.fromJson(data['data']);
     } else {
