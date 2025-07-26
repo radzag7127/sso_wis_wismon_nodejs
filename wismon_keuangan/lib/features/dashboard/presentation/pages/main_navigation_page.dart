@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart';
-import 'package:wismon_keuangan/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:wismon_keuangan/features/dashboard/presentation/pages/beranda_page.dart';
 import 'package:wismon_keuangan/features/menu/presentation/pages/menu_page.dart';
 import 'package:wismon_keuangan/features/profile/presentation/pages/profile_page.dart';
 
@@ -19,7 +19,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
-    const DashboardPage(),
+    const BerandaPage(),
     const MenuPage(),
     const ProfilePage(),
   ];

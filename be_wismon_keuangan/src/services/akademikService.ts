@@ -1,6 +1,6 @@
 // src/services/akademikService.ts
 
-import { executeWisakaQuery } from '../config/database';
+import { executeWisakaQuery } from "../config/database";
 import {
   Course,
   Transkrip,
@@ -10,7 +10,7 @@ import {
   Krs,
   KrsCourse,
   DaftarMahasiswa,
-} from '../types';
+} from "../types";
 
 export class AkademikService {
   /**
@@ -55,20 +55,22 @@ export class AkademikService {
     const courses = (await executeWisakaQuery(sql, [nrm])) as any[];
 
     if (courses.length === 0) {
-      throw new Error('Tidak ada data transkrip ditemukan untuk mahasiswa ini.');
+      throw new Error(
+        "Tidak ada data transkrip ditemukan untuk mahasiswa ini."
+      );
     }
 
     let totalSks = 0;
     let totalBobot = 0;
 
-    courses.forEach(course => {
+    courses.forEach((course) => {
       if (course.bobotnilai !== null && course.sks != null) {
         totalSks += course.sks;
-        totalBobot += (course.bobotnilai * course.sks);
+        totalBobot += course.bobotnilai * course.sks;
       }
     });
 
-    const ipk = totalSks > 0 ? (totalBobot / totalSks) : 0;
+    const ipk = totalSks > 0 ? totalBobot / totalSks : 0;
 
     return {
       ipk: ipk.toFixed(2),
@@ -77,10 +79,84 @@ export class AkademikService {
     };
   }
 
-/**
-     * Mengambil Kartu Hasil Studi (KHS) mahasiswa, lengkap dengan rekapitulasi IP dan SKS.
-     * Fungsi ini mengadopsi struktur dari getKrs dan mengembangkannya untuk kebutuhan KHS.
-     */
+  /**
+   * Get transcript summary data for Beranda page
+   * Returns only aggregated data without full course list
+   */
+  async getTranscriptSummary(nrm: string) {
+    console.log("📚 AKADEMIK SERVICE - getTranscriptSummary called:", {
+      nrm,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const sql = `
+        SELECT
+          mk.sks,
+          krs.bobotnilai
+        FROM
+          krsmatakuliah AS krs
+        JOIN
+          matakuliah AS mk
+        ON krs.kdmk = mk.kdmk
+          AND krs.kurikulum = mk.kurikulum
+        WHERE
+          krs.nrm = ?
+          AND krs.bobotnilai IS NOT NULL
+          AND mk.sks IS NOT NULL;
+      `;
+
+      const courses = (await executeWisakaQuery(sql, [nrm])) as any[];
+
+      if (courses.length === 0) {
+        console.log(
+          "📚 AKADEMIK SERVICE - No transcript data found for student:",
+          nrm
+        );
+        return {
+          totalSks: 0,
+          totalBobot: 0,
+          ipKumulatif: 0,
+        };
+      }
+
+      let totalSks = 0;
+      let totalBobot = 0;
+
+      courses.forEach((course) => {
+        if (course.bobotnilai !== null && course.sks != null) {
+          totalSks += course.sks;
+          totalBobot += course.bobotnilai * course.sks;
+        }
+      });
+
+      const ipk = totalSks > 0 ? totalBobot / totalSks : 0;
+
+      const summary = {
+        totalSks,
+        totalBobot: parseFloat(totalBobot.toFixed(1)),
+        ipKumulatif: parseFloat(ipk.toFixed(2)),
+      };
+
+      console.log(
+        "📚 AKADEMIK SERVICE - Transcript summary calculated:",
+        summary
+      );
+
+      return summary;
+    } catch (error) {
+      console.error(
+        "📚 AKADEMIK SERVICE - Error getting transcript summary:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Mengambil Kartu Hasil Studi (KHS) mahasiswa, lengkap dengan rekapitulasi IP dan SKS.
+   * Fungsi ini mengadopsi struktur dari getKrs dan mengembangkannya untuk kebutuhan KHS.
+   */
   async getKhs(nrm: string, semesterKe: number): Promise<Khs> {
     // Query ini mengambil SEMUA riwayat studi mahasiswa untuk memungkinkan perhitungan kumulatif.
     // Data untuk semester spesifik akan difilter dan diproses di dalam kode.
@@ -116,87 +192,103 @@ export class AkademikService {
     const allCoursesHistory = (await executeWisakaQuery(query, [nrm])) as any[];
 
     if (allCoursesHistory.length === 0) {
-        throw new Error("Tidak ada data riwayat studi ditemukan untuk mahasiswa ini.");
+      throw new Error(
+        "Tidak ada data riwayat studi ditemukan untuk mahasiswa ini."
+      );
     }
 
     // --- Inisialisasi Variabel Kalkulasi ---
-    let sksSemesterBeban = 0, sksSemesterLulus = 0;
-    let totalBobotSemester = 0, totalBobotLulusSemester = 0;
+    let sksSemesterBeban = 0,
+      sksSemesterLulus = 0;
+    let totalBobotSemester = 0,
+      totalBobotLulusSemester = 0;
 
-    let sksKumulatifBeban = 0, sksKumulatifLulus = 0;
-    let totalBobotKumulatif = 0, totalBobotLulusKumulatif = 0;
+    let sksKumulatifBeban = 0,
+      sksKumulatifLulus = 0;
+    let totalBobotKumulatif = 0,
+      totalBobotLulusKumulatif = 0;
 
     const mataKuliahList: KhsCourse[] = [];
     let semesterInfo: any = null;
 
     // --- Proses Semua Data dalam Satu Iterasi ---
     for (const course of allCoursesHistory) {
-        const sks = Number(course.sks) || 0;
-        const bobotNilai = Number(course.bobotnilai) || 0;
-        const isLulus = course.status === 1;
+      const sks = Number(course.sks) || 0;
+      const bobotNilai = Number(course.bobotnilai) || 0;
+      const isLulus = course.status === 1;
 
-        // 1. Kalkulasi untuk semester yang dipilih
-        if (course.semesterke === semesterKe) {
-            if (!semesterInfo) {
-                semesterInfo = course; // Simpan info semester dari baris pertama yang cocok
-            }
-
-            sksSemesterBeban += sks;
-            totalBobotSemester += sks * bobotNilai;
-            if (isLulus) {
-                sksSemesterLulus += sks;
-                totalBobotLulusSemester += sks * bobotNilai;
-            }
-            
-            mataKuliahList.push({
-                nilai: course.nilai || '-',
-                kodeMataKuliah: course.kdmk,
-                namaMataKuliah: course.namamk,
-                sks: sks,
-                kelas: course.kelas || null
-            });
+      // 1. Kalkulasi untuk semester yang dipilih
+      if (course.semesterke === semesterKe) {
+        if (!semesterInfo) {
+          semesterInfo = course; // Simpan info semester dari baris pertama yang cocok
         }
 
-        // 2. Kalkulasi untuk data kumulatif (hingga semester yang dipilih)
-        if (course.semesterke <= semesterKe) {
-            sksKumulatifBeban += sks;
-            totalBobotKumulatif += sks * bobotNilai;
-            if (isLulus) {
-                sksKumulatifLulus += sks;
-                totalBobotLulusKumulatif += sks * bobotNilai;
-            }
+        sksSemesterBeban += sks;
+        totalBobotSemester += sks * bobotNilai;
+        if (isLulus) {
+          sksSemesterLulus += sks;
+          totalBobotLulusSemester += sks * bobotNilai;
         }
+
+        mataKuliahList.push({
+          nilai: course.nilai || "-",
+          kodeMataKuliah: course.kdmk,
+          namaMataKuliah: course.namamk,
+          sks: sks,
+          kelas: course.kelas || null,
+        });
+      }
+
+      // 2. Kalkulasi untuk data kumulatif (hingga semester yang dipilih)
+      if (course.semesterke <= semesterKe) {
+        sksKumulatifBeban += sks;
+        totalBobotKumulatif += sks * bobotNilai;
+        if (isLulus) {
+          sksKumulatifLulus += sks;
+          totalBobotLulusKumulatif += sks * bobotNilai;
+        }
+      }
     }
 
     if (!semesterInfo) {
-        throw new Error(`Tidak ada data KHS ditemukan untuk semester ${semesterKe}.`);
+      throw new Error(
+        `Tidak ada data KHS ditemukan untuk semester ${semesterKe}.`
+      );
     }
 
     // --- Kalkulasi Final IP & SKS ---
-    const ipSemesterBeban = sksSemesterBeban > 0 ? (totalBobotSemester / sksSemesterBeban) : 0;
-    const ipSemesterLulus = sksSemesterLulus > 0 ? (totalBobotLulusSemester / sksSemesterLulus) : 0;
-    const ipKumulatifBeban = sksKumulatifBeban > 0 ? (totalBobotKumulatif / sksKumulatifBeban) : 0;
-    const ipKumulatifLulus = sksKumulatifLulus > 0 ? (totalBobotLulusKumulatif / sksKumulatifLulus) : 0;
+    const ipSemesterBeban =
+      sksSemesterBeban > 0 ? totalBobotSemester / sksSemesterBeban : 0;
+    const ipSemesterLulus =
+      sksSemesterLulus > 0 ? totalBobotLulusSemester / sksSemesterLulus : 0;
+    const ipKumulatifBeban =
+      sksKumulatifBeban > 0 ? totalBobotKumulatif / sksKumulatifBeban : 0;
+    const ipKumulatifLulus =
+      sksKumulatifLulus > 0 ? totalBobotLulusKumulatif / sksKumulatifLulus : 0;
 
     const rekapitulasi: Rekapitulasi = {
-        ipSemester: `${ipSemesterLulus.toFixed(2)} / ${ipSemesterBeban.toFixed(2)}`,
-        sksSemester: `${sksSemesterLulus} / ${sksSemesterBeban}`,
-        ipKumulatif: `${ipKumulatifLulus.toFixed(2)} / ${ipKumulatifBeban.toFixed(2)}`,
-        sksKumulatif: `${sksKumulatifLulus} / ${sksKumulatifBeban}`
+      ipSemester: `${ipSemesterLulus.toFixed(2)} / ${ipSemesterBeban.toFixed(
+        2
+      )}`,
+      sksSemester: `${sksSemesterLulus} / ${sksSemesterBeban}`,
+      ipKumulatif: `${ipKumulatifLulus.toFixed(2)} / ${ipKumulatifBeban.toFixed(
+        2
+      )}`,
+      sksKumulatif: `${sksKumulatifLulus} / ${sksKumulatifBeban}`,
     };
 
     // Helper function untuk mendapatkan nama semester, sama seperti di getKrs
     const getJenisSemesterText = (kode: number): string => {
-        return kode === 1 ? 'Ganjil' : (kode === 2 ? 'Genap' : 'Antara');
+      return kode === 1 ? "Ganjil" : kode === 2 ? "Genap" : "Antara";
     };
 
     // --- Menyusun Objek Respons Final ---
     const khsResult: Khs = {
-        semesterKe: semesterInfo.semesterke,
-        jenisSemester: getJenisSemesterText(semesterInfo.jenisSemesterKode),
-        tahunAjaran: `${semesterInfo.tahun}/${semesterInfo.tahun + 1}`,
-        mataKuliah: mataKuliahList,
-        rekapitulasi: rekapitulasi,
+      semesterKe: semesterInfo.semesterke,
+      jenisSemester: getJenisSemesterText(semesterInfo.jenisSemesterKode),
+      tahunAjaran: `${semesterInfo.tahun}/${semesterInfo.tahun + 1}`,
+      mataKuliah: mataKuliahList,
+      rekapitulasi: rekapitulasi,
     };
 
     return khsResult;
@@ -241,19 +333,30 @@ export class AkademikService {
         mk.kdmk;
     `;
 
-    const krsData = (await executeWisakaQuery(query, [nrm, semesterKe, jenisSemester])) as any[];
+    const krsData = (await executeWisakaQuery(query, [
+      nrm,
+      semesterKe,
+      jenisSemester,
+    ])) as any[];
 
     if (krsData.length === 0) {
-      throw new Error("Tidak ada data KRS ditemukan untuk semester yang diminta.");
+      throw new Error(
+        "Tidak ada data KRS ditemukan untuk semester yang diminta."
+      );
     }
 
     const getJenisSemesterText = (kode: number): string => {
       switch (kode) {
-        case 1: return 'Ganjil';
-        case 2: return 'Genap';
-        case 3: return 'Antara Pendek';
-        case 4: return 'Antara Panjang';
-        default: return 'Tidak Diketahui';
+        case 1:
+          return "Ganjil";
+        case 2:
+          return "Genap";
+        case 3:
+          return "Antara Pendek";
+        case 4:
+          return "Antara Panjang";
+        default:
+          return "Tidak Diketahui";
       }
     };
 
@@ -265,7 +368,10 @@ export class AkademikService {
       kelas: row.kelas || null,
     }));
 
-    const totalSks = mataKuliahList.reduce((sum, course) => sum + (course.sks || 0), 0);
+    const totalSks = mataKuliahList.reduce(
+      (sum, course) => sum + (course.sks || 0),
+      0
+    );
 
     const krsResult: Krs = {
       semesterKe: firstRow.semesterKe,

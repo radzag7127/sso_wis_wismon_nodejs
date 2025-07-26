@@ -120,10 +120,14 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
     RefreshPaymentDataEvent event,
     Emitter<PaymentState> emit,
   ) async {
-    final result = await getPaymentHistoryUseCase(
-      const PaymentHistoryParams(page: 1, limit: 20),
+    emit(const PaymentLoading());
+
+    final result = await getPaymentSummaryUseCase(NoParams());
+
+    result.fold(
+      (failure) => emit(PaymentError(message: _mapFailureToMessage(failure))),
+      (summary) => emit(PaymentSummaryLoaded(summary: summary)),
     );
-    add(const LoadPaymentHistoryEvent());
   }
 
   String _mapFailureToMessage(Failure failure) {

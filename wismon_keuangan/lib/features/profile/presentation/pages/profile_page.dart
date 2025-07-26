@@ -14,20 +14,27 @@ class ProfilePage extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Correctly positioned logo background
+          // Mountain peaks background anchored to bottom
           Positioned(
-            left: 120,
-            bottom: 1,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height:
+                MediaQuery.of(context).size.height * 1, // 100% of screen height
             child: RepaintBoundary(
-              child: Opacity(
-                opacity: 1,
-                child: Transform.scale(
-                  scale: 3,
+              child: ClipRect(
+                child: Transform.translate(
+                  offset: const Offset(
+                    0,
+                    400,
+                  ), // Push bottom part below visible area
                   child: SvgPicture.asset(
                     'assets/LogoWHNProfil.svg',
-                    width: 300,
-                    height: 185,
-                    fit: BoxFit.contain,
+                    width: MediaQuery.of(context).size.width,
+                    height:
+                        MediaQuery.of(context).size.width *
+                        (391 / 402), // Maintain aspect ratio
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),

@@ -54,6 +54,9 @@ dependencies:
   intl: ^0.20.2
   flutter_svg: ^2.2.0
 
+  # URL launcher for external links
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -79,6 +82,7 @@ flutter:
   assets:
     - assets/LOGOWHS.svg
     - assets/LogoWHNProfil.svg
+    - assets/wira-husada-nusantara-homepage.svg
     - assets/images/menu_background.svg
     - assets/images/profile_background.svg
 

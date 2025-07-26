@@ -8,304 +8,712 @@ import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_b
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_event.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_state.dart';
 
-class TranskripPage extends StatelessWidget {
+class TranskripPage extends StatefulWidget {
   const TranskripPage({super.key});
+
+  @override
+  State<TranskripPage> createState() => _TranskripPageState();
+}
+
+class _TranskripPageState extends State<TranskripPage> {
+  String selectedSemester = 'Semua Semester';
+  final List<String> semesterOptions = [
+    'Semua Semester',
+    'Genap 2024/2025',
+    'Ganjil 2024/2025',
+    'Genap 2023/2024',
+    'Ganjil 2023/2024',
+    'Genap 2022/2023',
+    'Ganjil 2022/2023',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) => di.sl<TranskripBloc>()..add(const FetchTranskrip()),
-      child: const TranskripView(),
-    );
-  }
-}
-
-class TranskripView extends StatelessWidget {
-  const TranskripView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9),
-      appBar: AppBar(
-        title: const Text(
-          'Transkrip Nilai',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF135EA2),
-        foregroundColor: Colors.white,
-      ),
-      body: BlocBuilder<TranskripBloc, TranskripState>(
-        builder: (context, state) {
-          if (state is TranskripLoading) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (state is TranskripLoaded) {
-            return _buildTranskripContent(context, state.transkrip);
-          } else if (state is TranskripError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'Gagal memuat data: ${state.message}',
-                  textAlign: TextAlign.center,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBFBFB),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Expanded(
+                child: BlocBuilder<TranskripBloc, TranskripState>(
+                  builder: (context, state) {
+                    if (state is TranskripLoading) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF135EA2),
+                          ),
+                        ),
+                      );
+                    } else if (state is TranskripLoaded) {
+                      return _buildContent(context, state.transkrip);
+                    } else if (state is TranskripError) {
+                      return _buildErrorState(context, state.message);
+                    }
+                    return const Center(
+                      child: Text("Memuat data transkrip..."),
+                    );
+                  },
                 ),
               ),
-            );
-          }
-          return const Center(child: Text("Memuat data transkrip..."));
-        },
-      ),
-      // Tombol Download di bagian bawah
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          onPressed: () {
-            // TODO: Implement download functionality
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Fitur download belum tersedia')),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF135EA2),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: const Text(
-            'Download Transkrip Nilai',
-            style: TextStyle(fontSize: 16),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTranskripContent(BuildContext context, Transkrip transkrip) {
-    // PERBAIKAN: Menghapus logika filter dan dropdown
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFF135EA2),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBFBFB),
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(
+                  Icons.chevron_left,
+                  color: Color(0xFF121212),
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            const Text(
+              'Transkrip Nilai',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFFBFBFB),
+                letterSpacing: -0.18,
+              ),
+            ),
+            const SizedBox(width: 40), // Spacer for center alignment
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, Transkrip transkrip) {
+    final filteredCourses = _filterCoursesBySemester(transkrip.courses);
+
+    return Column(
       children: [
-        _buildSummary(context, transkrip),
-        const SizedBox(height: 24),
-        _buildCourseListHeader(context),
-        _buildCourseList(
-          context,
-          transkrip.courses,
-        ), // Langsung menampilkan semua mata kuliah
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSemesterDropdown(),
+                const SizedBox(height: 20),
+                _buildSummaryCards(transkrip, filteredCourses),
+                const SizedBox(height: 20),
+                const Divider(color: Color(0xFFE7E7E7), height: 1),
+                const SizedBox(height: 20),
+                _buildCourseList(filteredCourses),
+              ],
+            ),
+          ),
+        ),
+        _buildDownloadButton(context),
       ],
     );
   }
 
-  Widget _buildSummary(BuildContext context, Transkrip transkrip) {
-    final totalBobot = transkrip.courses.fold<double>(
-      0.0,
-      (sum, item) => sum + ((item.bobotNilai ?? 0) * item.sks),
+  Widget _buildErrorState(BuildContext context, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Gagal memuat data',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              context.read<TranskripBloc>().add(const FetchTranskrip());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF135EA2),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Coba Lagi',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildSemesterDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pilih Semester',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF121315),
+            letterSpacing: -0.14,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE7E7E7)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedSemester,
+              isExpanded: true,
+              icon: const Icon(
+                Icons.keyboard_arrow_down,
+                color: Color(0xFF121212),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF545556),
+                letterSpacing: -0.14,
+              ),
+              items: semesterOptions.map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    selectedSemester = newValue;
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCards(Transkrip transkrip, List<Course> filteredCourses) {
+    final totalSks = filteredCourses.fold<int>(
+      0,
+      (sum, course) => sum + course.sks,
+    );
+    final totalBobot = filteredCourses.fold<double>(
+      0.0,
+      (sum, course) => sum + ((course.bobotNilai ?? 0) * course.sks),
+    );
+    final ipk = totalSks > 0 ? totalBobot / totalSks : 0.0;
 
     return Row(
       children: [
         Expanded(
-          child: _SummaryCard(
-            title: 'Total SKS',
-            value: transkrip.totalSks.toString(),
-          ),
+          child: _SummaryCard(title: 'Total SKS', value: totalSks.toString()),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: _SummaryCard(
             title: 'Total Bobot',
             value: totalBobot.toStringAsFixed(1),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
-          child: _SummaryCard(title: 'IP Kumulatif', value: transkrip.ipk),
+          child: _SummaryCard(
+            title: 'IP Kumulatif',
+            value: ipk.toStringAsFixed(2),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildCourseListHeader(BuildContext context) {
+  Widget _buildCourseList(List<Course> courses) {
+    if (courses.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Tidak ada data mata kuliah untuk semester yang dipilih',
+            style: TextStyle(fontSize: 14, color: Color(0xFF545556)),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTableHeader(),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: courses.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 4),
+          itemBuilder: (context, index) {
+            return _CourseTile(course: courses[index]);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTableHeader() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          const Expanded(
-            flex: 1,
+          const SizedBox(
+            width: 64,
             child: Text(
               'Semester',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
+          const SizedBox(width: 8),
           const Expanded(
-            flex: 4,
             child: Text(
               'Nama Matakuliah',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-          ),
-          const Expanded(
-            flex: 1,
-            child: Text(
-              'SKS',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-          ),
-          const Expanded(
-            flex: 1,
-            child: Text(
-              'Nilai',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-          ),
-          const Expanded(
-            flex: 1,
-            child: Text(
-              'Bobot',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCourseList(BuildContext context, List<Course> courses) {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: courses.length,
-      itemBuilder: (context, index) {
-        return _CourseTile(course: courses[index]);
-      },
-    );
-  }
-}
-
-// Widget untuk kartu rangkuman (Total SKS, Bobot, IPK)
-class _SummaryCard extends StatelessWidget {
-  final String title;
-  final String value;
-  const _SummaryCard({required this.title, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Column(
-        children: [
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Widget untuk setiap baris mata kuliah di dalam transkrip
-class _CourseTile extends StatelessWidget {
-  final Course course;
-  const _CourseTile({required this.course});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            // Semester
-            Expanded(
-              flex: 1,
-              child: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    course.semesterKe.toString(),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
               ),
             ),
-            const SizedBox(width: 8),
-            // Nama Matakuliah & Chips
-            Expanded(
-              flex: 4,
+          ),
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 37,
+            child: Text(
+              'SKS',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 37,
+            child: Text(
+              'Nilai',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 37,
+            child: Text(
+              'Bobot',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadButton(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFBFBFB),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+      child: ElevatedButton(
+        onPressed: () => _showDownloadModal(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF135EA2),
+          foregroundColor: const Color(0xFFFBFBFB),
+          minimumSize: const Size(double.infinity, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          elevation: 0,
+        ),
+        child: const Text(
+          'Download Transkrip Nilai',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.16,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDownloadModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBFBFB),
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    course.namamk,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8.0,
+                  const Column(
                     children: [
-                      _InfoChip(
-                        text: '2020',
-                        backgroundColor: Colors.grey[200]!,
-                        textColor: Colors.grey[700]!,
+                      Text(
+                        'Download Transkrip Nilai',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF121212),
+                          letterSpacing: -0.2,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      _InfoChip(
-                        text: 'BD.5.101',
-                        backgroundColor: Colors.grey[200]!,
-                        textColor: Colors.grey[700]!,
+                      SizedBox(height: 4),
+                      Text(
+                        'Apakah Anda yakin untuk download\ntranskrip nilai Anda?',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF545556),
+                          letterSpacing: -0.14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF858586),
+                            foregroundColor: const Color(0xFFFBFBFB),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: const Text(
+                            'Kembali',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Fitur download sedang dalam pengembangan',
+                                ),
+                                backgroundColor: Color(0xFF135EA2),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF135EA2),
+                            foregroundColor: const Color(0xFFFBFBFB),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: const Text(
+                            'Download',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-            // SKS, Nilai, Bobot
-            Expanded(
-              flex: 1,
-              child: Text(course.sks.toString(), textAlign: TextAlign.center),
-            ),
-            Expanded(
-              flex: 1,
-              child: Text(course.nilai ?? '-', textAlign: TextAlign.center),
-            ),
-            Expanded(
-              flex: 1,
-              child: Text(
-                course.bobotNilai?.toStringAsFixed(1) ?? '0.0',
-                textAlign: TextAlign.center,
+          ),
+        );
+      },
+    );
+  }
+
+  List<Course> _filterCoursesBySemester(List<Course> courses) {
+    if (selectedSemester == 'Semua Semester') {
+      return courses;
+    }
+
+    // Simple filtering logic - can be enhanced based on actual semester data structure
+    return courses;
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final String title;
+  final String value;
+
+  const _SummaryCard({required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBFBFB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE7E7E7)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1C1D1F),
+                letterSpacing: -0.12,
               ),
+              textAlign: TextAlign.left,
             ),
-          ],
-        ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE7E7E7)),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF121212),
+                letterSpacing: -0.2,
+              ),
+              textAlign: TextAlign.left,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// Widget untuk chip info
+class _CourseTile extends StatelessWidget {
+  final Course course;
+
+  const _CourseTile({required this.course});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE7E7E7)),
+      ),
+      child: Row(
+        children: [
+          // Semester number with circular background
+          Container(
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F5F5),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                course.semesterKe.toString(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1C1D1F),
+                  letterSpacing: -0.14,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Course info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  course.namamk,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1C1D1F),
+                    letterSpacing: -0.12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _InfoChip(
+                      text: '2020',
+                      backgroundColor: const Color(0xFF135EA2),
+                      textColor: const Color(0xFFFBFBFB),
+                    ),
+                    const SizedBox(width: 4),
+                    _InfoChip(
+                      text: 'BD.5.101',
+                      backgroundColor: const Color(0xFFA6DCFF),
+                      textColor: const Color(0xFF121212),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // SKS, Nilai, Bobot
+          Row(
+            children: [
+              SizedBox(
+                width: 37,
+                child: Text(
+                  course.sks.toString(),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF121212),
+                    letterSpacing: -0.14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 37,
+                child: Text(
+                  course.nilai ?? 'null',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF121212),
+                    letterSpacing: -0.14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 37,
+                child: Text(
+                  (course.bobotNilai ?? 0).toStringAsFixed(1),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF121212),
+                    letterSpacing: -0.14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoChip extends StatelessWidget {
   final String text;
   final Color backgroundColor;
@@ -320,17 +728,19 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        text,
+        text.toUpperCase(),
         style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
           color: textColor,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+          height: 16 / 9,
         ),
       ),
     );

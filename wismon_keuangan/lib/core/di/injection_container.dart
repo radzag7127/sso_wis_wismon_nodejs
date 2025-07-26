@@ -34,6 +34,12 @@ import 'package:wismon_keuangan/features/transkrip/domain/repositories/transkrip
 import 'package:wismon_keuangan/features/transkrip/domain/usecases/get_transkrip_usecase.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_bloc.dart';
 
+// --- IMPORT UNTUK FITUR BERANDA ---
+import '../../features/dashboard/data/repositories/beranda_repository_impl.dart';
+import '../../features/dashboard/domain/repositories/beranda_repository.dart';
+import '../../features/dashboard/domain/usecases/get_beranda_data_usecase.dart';
+import '../../features/dashboard/presentation/bloc/beranda_bloc.dart';
+
 final sl = GetIt.instance;
 
 Future<void> init() async {
@@ -118,4 +124,14 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetKhsUseCase(sl()));
   // Bloc
   sl.registerFactory(() => KhsBloc(getKhsUseCase: sl()));
+
+  // --- BERANDA FEATURE ---
+  // Repository
+  sl.registerLazySingleton<BerandaRepository>(
+    () => BerandaRepositoryImpl(apiService: sl()),
+  );
+  // Use cases
+  sl.registerLazySingleton(() => GetBerandaDataUseCase(sl()));
+  // Bloc
+  sl.registerFactory(() => BerandaBloc(getBerandaDataUseCase: sl()));
 }
