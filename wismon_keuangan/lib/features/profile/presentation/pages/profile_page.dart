@@ -4,6 +4,7 @@ import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_event.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -107,7 +108,7 @@ class ProfilePage extends StatelessWidget {
               ),
               child: IconButton(
                 onPressed: () {
-                  _showSettingsBottomSheet(context);
+                  _navigateToSettings(context);
                 },
                 icon: const Icon(
                   Icons.settings,
@@ -123,65 +124,10 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  void _showSettingsBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext sheetContext) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Pengaturan Profil',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Kelola profil dan pengaturan akun Anda di sini.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  // TODO: Implement profile edit functionality
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Fitur edit profil akan segera tersedia'),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF207BB5),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text(
-                  'Edit Profil',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(sheetContext),
-                child: const Text(
-                  'Tutup',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  void _navigateToSettings(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const SettingsPage()));
   }
 
   Widget _buildErrorState(BuildContext context, String message) {

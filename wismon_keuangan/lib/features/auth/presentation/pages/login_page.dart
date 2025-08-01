@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/di/injection_container.dart' as di;
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -22,25 +21,24 @@ class _LoginForm extends StatefulWidget {
 }
 
 class _LoginFormState extends State<_LoginForm> {
-  final _nimController = TextEditingController();
-  final _nrmController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   @override
   void dispose() {
-    _nimController.dispose();
-    _nrmController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
   void _onLoginPressed() {
     // Hide keyboard
     FocusScope.of(context).unfocus();
-    // Dispatch event
+    // Dispatch event with same parameter names for backend compatibility
     context.read<AuthBloc>().add(
       LoginRequestedEvent(
-        namamNim: _nimController.text,
-        nrm: _nrmController.text,
+        namamNim: _usernameController.text, // Using username field for nama/nim
+        nrm: _passwordController.text, // Using password field for nrm
       ),
     );
   }
@@ -52,72 +50,218 @@ class _LoginFormState extends State<_LoginForm> {
         if (state is AuthError) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(state.message)));
+            ..showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Colors.red,
+              ),
+            );
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Login Mahasiswa'), centerTitle: true),
-        body: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(
-                  Icons.school,
-                  size: 80,
-                  color: Theme.of(context).primaryColor,
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _nimController,
-                  decoration: const InputDecoration(
-                    labelText: 'NIM/NPM',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+        backgroundColor: const Color(0xFFFBFBFB),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Custom Header
+              _buildHeader(),
+              // Form Content
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 56), // Space from header
+                        _buildInputFields(),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
                   ),
-                  keyboardType: TextInputType.text,
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _nrmController,
-                  decoration: const InputDecoration(
-                    labelText: 'NRM',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 32),
-                BlocBuilder<AuthBloc, AuthState>(
-                  builder: (context, state) {
-                    final isLoading = state is AuthLoading;
-                    return ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: isLoading ? null : _onLoginPressed,
-                      child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Login'),
-                    );
-                  },
+              ),
+              // Bottom Button
+              _buildBottomButton(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Back Button
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFBFBFB),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => Navigator.of(context).pop(),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.chevron_left,
+                    size: 24,
+                    color: Color(0xFF121315),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Title
+          const Text(
+            'Masuk ke Aplikasi',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF121111),
+              fontSize: 24,
+              fontFamily: 'Plus Jakarta Sans',
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.24,
+            ),
+          ),
+          // Spacer (same width as back button)
+          const SizedBox(width: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputFields() {
+    return Column(
+      children: [
+        // Username Field
+        _buildInputField(
+          label: 'Username atau Email',
+          controller: _usernameController,
+          keyboardType: TextInputType.text,
+        ),
+        const SizedBox(height: 24),
+        // Password Field
+        _buildInputField(
+          label: 'Kata Sandi',
+          controller: _passwordController,
+          obscureText: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputField({
+    required String label,
+    required TextEditingController controller,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF1C1D1F),
+            fontSize: 12,
+            fontFamily: 'Plus Jakarta Sans',
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.12,
           ),
         ),
+        const SizedBox(height: 8),
+        // Input Container
+        Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFBFBFB),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFCECECF), width: 1),
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            style: const TextStyle(
+              color: Color(0xFF1C1D1F),
+              fontSize: 14,
+              fontFamily: 'Plus Jakarta Sans',
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.14,
+            ),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomButton() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) {
+              final isLoading = state is AuthLoading;
+              return SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _onLoginPressed,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF135EA2),
+                    disabledBackgroundColor: const Color(
+                      0xFF135EA2,
+                    ).withOpacity(0.6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Masuk Sekarang',
+                          style: TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFF3F3F3),
+                            letterSpacing: -0.16,
+                          ),
+                        ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }
