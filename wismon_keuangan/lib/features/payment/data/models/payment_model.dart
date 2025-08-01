@@ -109,3 +109,16 @@ class TransactionDetailModel extends TransactionDetail {
     );
   }
 }
+
+// --- PAYMENT TYPE MODEL ---
+
+class PaymentTypeModel extends PaymentType {
+  const PaymentTypeModel({required super.kode, required super.nama});
+
+  factory PaymentTypeModel.fromJson(Map<String, dynamic> json) {
+    return PaymentTypeModel(
+      kode: json['kode'].toString(),
+      nama: json['nama'].toString(),
+    );
+  }
+}

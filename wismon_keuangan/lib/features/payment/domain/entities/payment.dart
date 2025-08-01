@@ -101,3 +101,15 @@ class TransactionDetail extends Equatable {
     paymentBreakdown,
   ];
 }
+
+// --- PAYMENT TYPE ---
+
+class PaymentType extends Equatable {
+  final String kode;
+  final String nama;
+
+  const PaymentType({required this.kode, required this.nama});
+
+  @override
+  List<Object> get props => [kode, nama];
+}
