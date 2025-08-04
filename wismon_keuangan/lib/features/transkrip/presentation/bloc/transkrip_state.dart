@@ -30,3 +30,15 @@ class TranskripError extends TranskripState {
   @override
   List<Object> get props => [message];
 }
+
+// --- STATE BARU: Untuk memberikan feedback ke UI ---
+class TranskripUpdateSuccess extends TranskripState {
+  const TranskripUpdateSuccess();
+}
+
+class TranskripUpdateError extends TranskripState {
+  final String message;
+  const TranskripUpdateError({required this.message});
+  @override
+  List<Object> get props => [message];
+}

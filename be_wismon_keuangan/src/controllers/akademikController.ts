@@ -60,7 +60,78 @@ export class AkademikController {
             errors: [errorMessage] 
         });
     }
-}
+  }
+
+
+
+
+    /**
+   * CONTROLLER BARU: Menangani permintaan untuk mengubah status usulan hapus.
+   */
+    async updateUsulanHapus(req: Request, res: Response): Promise<void> {
+      try {
+        const user = (req as any).user as JWTPayload;
+        const { kodeMataKuliah, kurikulum, semesterKe, newStatus } = req.body;
+  
+        // Validasi input dari body request
+        if (
+          kodeMataKuliah == null ||
+          kurikulum == null ||
+          semesterKe == null ||
+          newStatus == null
+        ) {
+          res.status(400).json({
+            success: false,
+            message: "Parameter tidak lengkap. 'kodeMataKuliah', 'kurikulum', 'semesterKe', dan 'newStatus' wajib diisi.",
+          } as ApiResponse);
+          return;
+        }
+  
+        const success = await akademikService.updateUsulanHapus(
+          user.nrm,
+          kodeMataKuliah,
+          kurikulum,
+          semesterKe,
+          newStatus
+        );
+  
+        if (success) {
+          res.json({
+            success: true,
+            message: "Status usulan penghapusan mata kuliah berhasil diperbarui.",
+          } as ApiResponse);
+        } else {
+          res.status(404).json({
+            success: false,
+            message: "Mata kuliah tidak ditemukan atau gagal diperbarui.",
+          } as ApiResponse);
+        }
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: "Terjadi kesalahan pada server.",
+          errors: [error instanceof Error ? error.message : "Unknown error"],
+        } as ApiResponse);
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /**
      * Controller untuk mengambil Kartu Hasil Studi (KHS).

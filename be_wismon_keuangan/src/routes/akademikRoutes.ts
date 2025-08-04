@@ -13,6 +13,9 @@ router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa); //paling
 // Rute untuk mendapatkan transkrip mahasiswa
 router.get('/mahasiswa/transkrip', authenticateToken, akademikController.getTranskrip);
 
+// Rute untuk mengajukan/membatalkan usulan penghapusan
+router.post("/mahasiswa/transkrip/usul-hapus",authenticateToken,(req, res) => akademikController.updateUsulanHapus(req, res));
+
 // Rute untuk mendapatkan KHS per semester
 router.get('/mahasiswa/khs', authenticateToken, akademikController.getKhs);
 

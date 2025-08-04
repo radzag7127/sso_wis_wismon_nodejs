@@ -31,15 +31,19 @@ export class AkademikService {
 
   /**
    * Mengambil transkrip akademik lengkap seorang mahasiswa
+   * PERUBAHAN: Menambahkan kolom usulan_hapus dari database
    */
   async getTranskrip(nrm: string): Promise<Transkrip> {
     const sql = `
       SELECT
+        mk.kdmk AS kodeMataKuliah,
+        krs.kurikulum,
         mk.namamk,
         mk.sks,
         krs.nilai,
-        krs.bobotnilai,
-        krs.semesterke AS semesterKe
+        krs.bobotnilai AS bobotNilai,
+        krs.semesterke AS semesterKe,
+        krs.usulan_hapus AS usulanHapus
       FROM
         krsmatakuliah AS krs
       JOIN
@@ -49,10 +53,10 @@ export class AkademikService {
       WHERE
         krs.nrm = ?
       ORDER BY
-        krs.semesterke, mk.namamk;
+        mk.kdmk, krs.semesterke;
     `;
 
-    const courses = (await executeWisakaQuery(sql, [nrm])) as any[];
+    const courses = (await executeWisakaQuery(sql, [nrm])) as Course[];
 
     if (courses.length === 0) {
       throw new Error(
@@ -64,9 +68,9 @@ export class AkademikService {
     let totalBobot = 0;
 
     courses.forEach((course) => {
-      if (course.bobotnilai !== null && course.sks != null) {
+      if (course.bobotNilai != null && course.sks != null) {
         totalSks += course.sks;
-        totalBobot += course.bobotnilai * course.sks;
+        totalBobot += course.bobotNilai * course.sks;
       }
     });
 
@@ -77,6 +81,35 @@ export class AkademikService {
       total_sks: totalSks,
       courses: courses,
     };
+  }
+
+  /**
+   * FUNGSI BARU: Mengubah status usulan penghapusan mata kuliah.
+   * Fungsi ini membutuhkan kunci unik dari baris data: nrm, kdmk, kurikulum, dan semesterke.
+   */
+  async updateUsulanHapus(
+    nrm: string,
+    kodeMataKuliah: string,
+    kurikulum: string,
+    semesterKe: number,
+    newStatus: boolean
+  ): Promise<boolean> {
+    const sql = `
+      UPDATE krsmatakuliah
+      SET usulan_hapus = ?
+      WHERE nrm = ? AND kdmk = ? AND kurikulum = ? AND semesterke = ?;
+    `;
+
+    const result = await executeWisakaQuery(sql, [
+      newStatus,
+      nrm,
+      kodeMataKuliah,
+      kurikulum,
+      semesterKe,
+    ]);
+    
+    // Mengembalikan true jika ada baris yang terpengaruh (berhasil di-update)
+    return (result as any).affectedRows > 0;
   }
 
   /**

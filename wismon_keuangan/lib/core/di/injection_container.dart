@@ -34,6 +34,9 @@ import 'package:wismon_keuangan/features/transkrip/domain/repositories/transkrip
 import 'package:wismon_keuangan/features/transkrip/domain/usecases/get_transkrip_usecase.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_bloc.dart';
 
+// --- PERUBAHAN: Import use case baru yang akan kita daftarkan ---
+import 'package:wismon_keuangan/features/transkrip/domain/usecases/propose_deletion_usecase.dart';
+
 // --- IMPORT UNTUK FITUR BERANDA ---
 import '../../features/dashboard/data/repositories/beranda_repository_impl.dart';
 import '../../features/dashboard/domain/repositories/beranda_repository.dart';
@@ -87,12 +90,25 @@ Future<void> init() async {
     ),
   );
 
+  // =================================================================
   // Transkrip Feature
+  // =================================================================
   sl.registerLazySingleton<TranskripRepository>(
     () => TranskripRepositoryImpl(apiService: sl()),
   );
+
   sl.registerLazySingleton(() => GetTranskripUseCase(sl()));
-  sl.registerFactory(() => TranskripBloc(getTranskripUseCase: sl()));
+
+  // --- PERUBAHAN: Daftarkan use case baru untuk usulan hapus ---
+  sl.registerLazySingleton(() => ProposeDeletionUseCase(sl()));
+
+  sl.registerFactory(
+    () => TranskripBloc(
+      getTranskripUseCase: sl(),
+      // --- PERBAIKAN: Sediakan use case yang dibutuhkan oleh BLoC ---
+      proposeDeletionUseCase: sl(),
+    ),
+  );
 
   // --- BLOK BARU UNTUK FITUR KRS ---
   // Bloc

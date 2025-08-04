@@ -129,12 +129,18 @@ export interface TransactionDetail extends PaymentHistoryItem {
 
 // --- Akademik ---
 export interface Course {
+  kodeMataKuliah: string; // PERUBAHAN: Ditambahkan
+  kurikulum: string; // PERUBAHAN: Ditambahkan
   namamk: string;
   sks: number;
   nilai?: string;
-  bobotNilai?: number;
+  bobotNilai: number;
   semesterKe?: number;
+
+  // --- PERUBAHAN: Tambahkan properti untuk status usulan hapus (INI BARU SOALNYA SAMPE ALTER DB) ---
+  usulanHapus?: boolean;
 }
+
 
 export interface Transkrip {
   ipk: string;
@@ -154,7 +160,27 @@ export interface JWTPayload {
   exp?: number;
 }
 
+/**
+ * Interface untuk struktur data KRS yang akan dikirim sebagai respons API.
+ */
+export interface Krs {
+  semesterKe: number;
+  jenisSemester: string; // e.g., "Ganjil", "Genap"
+  tahunAjaran: string; // e.g., "2023/2024"
+  mataKuliah: KrsCourse[];
+  totalSks: number;
+}
 
+/**
+* Merepresentasikan objek KHS secara keseluruhan yang akan dikirim sebagai respons.
+*/
+export interface Khs {
+  semesterKe: number;
+  jenisSemester: string;
+  tahunAjaran: string;
+  mataKuliah: KhsCourse[];
+  rekapitulasi: Rekapitulasi;
+}
 
 // ITU KRSCOURSE SAMA KHSCOURSE REDUNDANT, MUNGKIN BAKALAN TAK BENERIN KALAU UDAH SELESAI
 /**
@@ -165,17 +191,6 @@ export interface KrsCourse {
   namaMataKuliah: string;
   sks: number;
   kelas: string | null; // Kelas bisa jadi null jika tidak ada data kelas yang cocok
-}
-
-/**
- * Interface untuk struktur data KRS yang akan dikirim sebagai respons API.
- */
-export interface Krs {
-  semesterKe: number;
-  jenisSemester: string; // e.g., "Ganjil", "Genap"
-  tahunAjaran: string; // e.g., "2023/2024"
-  mataKuliah: KrsCourse[];
-  totalSks: number;
 }
 
 /**
@@ -197,17 +212,6 @@ export interface Rekapitulasi {
   sksSemester: string;     // Format: "Lulus / Beban" -> "18 / 20"
   ipKumulatif: string;     // Format: "Lulus / Beban"
   sksKumulatif: string;    // Format: "Lulus / Beban"
-}
-
-/**
-* Merepresentasikan objek KHS secara keseluruhan yang akan dikirim sebagai respons.
-*/
-export interface Khs {
-  semesterKe: number;
-  jenisSemester: string;
-  tahunAjaran: string;
-  mataKuliah: KhsCourse[];
-  rekapitulasi: Rekapitulasi;
 }
 
 export interface DaftarMahasiswa {

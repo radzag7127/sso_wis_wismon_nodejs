@@ -11,6 +11,9 @@ import '../../features/krs/data/models/krs_model.dart';
 import '../../features/khs/data/models/khs_model.dart';
 import 'package:flutter/foundation.dart';
 
+// --- PERUBAHAN: Import entitas Course agar bisa digunakan di fungsi baru ---
+import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
+
 class ApiService {
   // API Base URL
   // For Chrome/Web development: http://localhost:3000
@@ -360,6 +363,31 @@ class ApiService {
       return TranskripModel.fromJson(data['data']);
     } else {
       throw Exception(data['message'] ?? 'Gagal mengambil data transkrip');
+    }
+  }
+
+  // --- FUNGSI BARU: Untuk mengirim permintaan usulan penghapusan ke backend ---
+  // Fungsi ini akan dipanggil oleh Repository.
+  Future<bool> proposeCourseDeletion(Course courseToUpdate) async {
+    // Logika untuk membalik status boolean. Jika saat ini true, akan menjadi false, dan sebaliknya.
+    final newStatus = !courseToUpdate.usulanHapus;
+
+    final response = await post(
+      '/api/akademik/mahasiswa/transkrip/usul-hapus',
+      {
+        // Data ini dikirim sebagai body request ke backend
+        'kodeMataKuliah': courseToUpdate.kodeMataKuliah,
+        'kurikulum': courseToUpdate.kurikulum,
+        'semesterKe': courseToUpdate.semesterKe,
+        'newStatus': newStatus,
+      },
+    );
+
+    if (response['success'] == true) {
+      return true; // Mengembalikan true jika API merespon sukses
+    } else {
+      // Melempar error jika API gagal
+      throw Exception(response['message'] ?? 'Gagal memperbarui status usulan');
     }
   }
 

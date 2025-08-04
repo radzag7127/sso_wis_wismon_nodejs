@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../../core/di/injection_container.dart' as di;
 import '../../domain/entities/krs.dart';
 import '../bloc/krs_bloc.dart';
@@ -28,17 +29,17 @@ class KrsView extends StatefulWidget {
 
 class _KrsViewState extends State<KrsView> {
   int _selectedSemester = 1;
-  int _selectedCourseType = 0; // 0 untuk Reguler, 1 untuk Pendek
-
-  void _fetchData() {
-    context.read<KrsBloc>().add(FetchKrsData(semesterKe: _selectedSemester));
-  }
+  final int _selectedCourseType = 0; // 0 for Reguler, 1 for Pendek
+  final int latestSemesterForStudent = 6;
+  Krs? _lastLoadedKrs;
 
   void _onSemesterChanged(int newSemester) {
-    setState(() {
-      _selectedSemester = newSemester;
-    });
-    _fetchData();
+    if (newSemester >= 1 && newSemester <= latestSemesterForStudent) {
+      setState(() {
+        _selectedSemester = newSemester;
+      });
+      context.read<KrsBloc>().add(FetchKrsData(semesterKe: newSemester));
+    }
   }
 
   @override
@@ -57,31 +58,67 @@ class _KrsViewState extends State<KrsView> {
         children: [
           _buildFilterAndToggleSection(),
           Expanded(
-            child: BlocBuilder<KrsBloc, KrsState>(
-              builder: (context, state) {
-                if (state is KrsLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                } else if (state is KrsLoaded) {
-                  return _buildKrsContent(context, state.krs);
-                } else if (state is KrsError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Text(
-                        'Gagal memuat data: ${state.message}',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
+            child: BlocListener<KrsBloc, KrsState>(
+              listener: (context, state) {
+                if (state is KrsLoaded) {
+                  setState(() {
+                    _lastLoadedKrs = state.krs;
+                  });
                 }
-                return const Center(
-                  child: Text("Pilih semester untuk memulai."),
-                );
               },
+              child: BlocBuilder<KrsBloc, KrsState>(
+                builder: (context, state) {
+                  if (state is KrsLoading && _lastLoadedKrs == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (state is KrsError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Text(
+                          'Gagal memuat data: ${state.message}',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (_lastLoadedKrs != null) {
+                    return Stack(
+                      children: [
+                        // Konten yang bisa di-scroll
+                        _buildKrsContent(context, _lastLoadedKrs!),
+
+                        // Overlay loading
+                        if (state is KrsLoading)
+                          Container(
+                            color: Colors.black.withOpacity(0.1),
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+
+                  return const Center(
+                    child: Text("Pilih semester untuk memulai."),
+                  );
+                },
+              ),
             ),
           ),
         ],
       ),
+      // --- PERUBAHAN UTAMA: Bottom Navigation Bar untuk Navigasi Semester ---
+      bottomNavigationBar: _lastLoadedKrs != null
+          ? _SemesterNavigator(
+              currentSemester: _selectedSemester,
+              maxSemester: latestSemesterForStudent,
+              onNavigate: _onSemesterChanged,
+            )
+          : null,
     );
   }
 
@@ -93,6 +130,7 @@ class _KrsViewState extends State<KrsView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SemesterFilter(
+            latestSemester: latestSemesterForStudent,
             selectedSemester: _selectedSemester,
             onChanged: _onSemesterChanged,
           ),
@@ -101,7 +139,8 @@ class _KrsViewState extends State<KrsView> {
             selectedIndex: _selectedCourseType,
             onTap: (index) {
               setState(() {
-                _selectedCourseType = index;
+                // _selectedCourseType = index;
+                // Logic for course type change can be added here
               });
             },
           ),
@@ -111,28 +150,44 @@ class _KrsViewState extends State<KrsView> {
   }
 
   Widget _buildKrsContent(BuildContext context, Krs krs) {
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
-      children: [
-        _KrsHeaderCard(krs: krs),
-        const SizedBox(height: 24),
-        _MataKuliahList(courses: krs.mataKuliah),
-      ],
+    // Menggunakan SingleChildScrollView agar konten bisa di-scroll
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        16.0,
+        16.0,
+        16.0,
+        80.0,
+      ), // Padding bawah untuk ruang navigator
+      child: Column(
+        children: [
+          _KrsHeaderCard(krs: krs),
+          const SizedBox(height: 24),
+          _MataKuliahList(courses: krs.mataKuliah),
+        ],
+      ),
     );
   }
 }
 
-//--- WIDGET-WIDGET HASIL SLICING ---
+// --- WIDGET-WIDGET LAINNYA ---
 
 class _SemesterFilter extends StatelessWidget {
   final int selectedSemester;
+  final int latestSemester;
   final Function(int) onChanged;
-  final List<int> semesters = List.generate(14, (index) => index + 1);
 
-  _SemesterFilter({required this.selectedSemester, required this.onChanged});
+  const _SemesterFilter({
+    required this.selectedSemester,
+    required this.latestSemester,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final List<int> semesters = List.generate(
+      latestSemester,
+      (index) => index + 1,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -171,6 +226,62 @@ class _SemesterFilter extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _SemesterNavigator extends StatelessWidget {
+  final int currentSemester;
+  final int maxSemester;
+  final Function(int) onNavigate;
+
+  const _SemesterNavigator({
+    required this.currentSemester,
+    required this.maxSemester,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool canGoBack = currentSemester > 1;
+    final bool canGoForward = currentSemester < maxSemester;
+
+    if (maxSemester <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    // --- PERUBAHAN: Widget ini sekarang akan digunakan di bottomNavigationBar ---
+    return Container(
+      height: 60,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            iconSize: 32,
+            onPressed: canGoBack ? () => onNavigate(currentSemester - 1) : null,
+            color: canGoBack
+                ? Theme.of(context).primaryColor
+                : Colors.grey.withOpacity(0.5),
+          ),
+          Text(
+            'Semester $currentSemester',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            iconSize: 32,
+            onPressed: canGoForward
+                ? () => onNavigate(currentSemester + 1)
+                : null,
+            color: canGoForward
+                ? Theme.of(context).primaryColor
+                : Colors.grey.withOpacity(0.5),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -221,6 +332,7 @@ class _CourseTypeToggle extends StatelessWidget {
 
 class _KrsHeaderCard extends StatelessWidget {
   final Krs krs;
+
   const _KrsHeaderCard({required this.krs});
 
   @override
@@ -239,7 +351,7 @@ class _KrsHeaderCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Semester ${krs.semesterKe} - ${krs.jenisSemester}',
+                'Semester ${krs.semesterKe} (${krs.jenisSemester})',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -273,10 +385,19 @@ class _KrsHeaderCard extends StatelessWidget {
 
 class _MataKuliahList extends StatelessWidget {
   final List<KrsCourse> courses;
+
   const _MataKuliahList({required this.courses});
 
   @override
   Widget build(BuildContext context) {
+    if (courses.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 48.0),
+          child: Text("Tidak ada mata kuliah yang diambil."),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -290,7 +411,7 @@ class _MataKuliahList extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: courses.length,
           itemBuilder: (context, index) {
-            return MataKuliahTile(course: courses[index]);
+            return _MataKuliahTile(course: courses[index]);
           },
         ),
       ],
@@ -298,9 +419,10 @@ class _MataKuliahList extends StatelessWidget {
   }
 }
 
-class MataKuliahTile extends StatelessWidget {
+class _MataKuliahTile extends StatelessWidget {
   final KrsCourse course;
-  const MataKuliahTile({super.key, required this.course});
+
+  const _MataKuliahTile({required this.course});
 
   @override
   Widget build(BuildContext context) {
@@ -336,7 +458,6 @@ class MataKuliahTile extends StatelessWidget {
                   backgroundColor: const Color(0xFFD1E9FF),
                   textColor: const Color(0xFF0D6EFD),
                 ),
-                // PERBAIKAN: Menghapus chip Kurikulum
               ],
             ),
           ],

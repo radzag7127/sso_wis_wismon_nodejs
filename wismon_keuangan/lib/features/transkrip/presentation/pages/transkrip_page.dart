@@ -1,12 +1,16 @@
 // lib/features/transkrip/presentation/pages/transkrip_page.dart
-
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/material.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_bloc.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_event.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/bloc/transkrip_state.dart';
+
+// --- PERBAIKAN: Enum untuk kriteria dan arah pengurutan ---
+enum SortCriterion { semester, kode, nama, sks }
+
+enum SortDirection { ascending, descending }
 
 class TranskripPage extends StatefulWidget {
   const TranskripPage({super.key});
@@ -16,21 +20,114 @@ class TranskripPage extends StatefulWidget {
 }
 
 class _TranskripPageState extends State<TranskripPage> {
-  String selectedSemester = 'Semua Semester';
-  final List<String> semesterOptions = [
-    'Semua Semester',
-    'Genap 2024/2025',
-    'Ganjil 2024/2025',
-    'Genap 2023/2024',
-    'Ganjil 2023/2024',
-    'Genap 2022/2023',
-    'Ganjil 2022/2023',
-  ];
+  // --- PERBAIKAN UTAMA: Manajemen siklus hidup BLoC ---
+  // BLoC diinisialisasi sekali saat state dibuat untuk mencegah pembuatan ulang pada setiap build.
+  late final TranskripBloc _transkripBloc;
+
+  // --- State untuk manajemen filter dan data ---
+  List<Course> _originalCourses = [];
+  List<Course> _sortedCourses = [];
+  SortCriterion _currentSortCriterion =
+      SortCriterion.semester; // Default sorting
+  SortDirection _currentSortDirection = SortDirection.ascending;
+
+  // --- FITUR BARU: Set untuk menyimpan kode mata kuliah yang diulang ---
+  final Set<String> _repeatedCourseCodes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    // --- PERBAIKAN UTAMA: Inisialisasi BLoC dan memuat data awal ---
+    // Mengambil instance BLoC dari dependency injection.
+    _transkripBloc = di.sl<TranskripBloc>();
+    // Memanggil event untuk mengambil data transkrip.
+    _transkripBloc.add(const FetchTranskrip());
+  }
+
+  @override
+  void dispose() {
+    // --- PERBAIKAN UTAMA: Membersihkan BLoC saat widget tidak lagi digunakan ---
+    _transkripBloc.close();
+    super.dispose();
+  }
+
+  // --- FUNGSI BARU: Untuk mengidentifikasi mata kuliah mana yang merupakan pengulangan ---
+  void _identifyRepeatedCourses(List<Course> courses) {
+    final counts = <String, int>{};
+    // Hitung kemunculan setiap kode mata kuliah
+    for (final course in courses) {
+      counts[course.kodeMataKuliah] = (counts[course.kodeMataKuliah] ?? 0) + 1;
+    }
+    _repeatedCourseCodes.clear();
+    // Jika sebuah kode MK muncul lebih dari sekali, tambahkan ke dalam set
+    counts.forEach((key, value) {
+      if (value > 1) {
+        _repeatedCourseCodes.add(key);
+      }
+    });
+  }
+
+  // --- PERBAIKAN: Fungsi untuk melakukan pengurutan yang lebih aman ---
+  void _sortCourses() {
+    // Membuat salinan dari list original untuk diurutkan
+    List<Course> coursesToSort = List.from(_originalCourses);
+
+    coursesToSort.sort((a, b) {
+      int compareResult;
+      switch (_currentSortCriterion) {
+        case SortCriterion.semester:
+          // --- PERBAIKAN KESALAHAN PENGETIKAN: 'semesterKe' menjadi 'semesterke' ---
+          compareResult = a.semesterKe.compareTo(b.semesterKe);
+          // Jika semester sama, urutkan berdasarkan nama MK sebagai secondary sort
+          if (compareResult == 0) {
+            compareResult = a.namamk.compareTo(b.namamk);
+          }
+          break;
+        case SortCriterion.kode:
+          compareResult = a.kodeMataKuliah.compareTo(b.kodeMataKuliah);
+          break;
+        case SortCriterion.nama:
+          compareResult = a.namamk.compareTo(b.namamk);
+          break;
+        case SortCriterion.sks:
+          compareResult = (a.sks ?? 0).compareTo(b.sks ?? 0);
+          break;
+      }
+      // Terapkan arah pengurutan
+      return _currentSortDirection == SortDirection.ascending
+          ? compareResult
+          : -compareResult;
+    });
+
+    // Update state dengan list yang sudah diurutkan
+    setState(() {
+      _sortedCourses = coursesToSort;
+    });
+  }
+
+  void _onSortChanged(SortCriterion criterion) {
+    setState(() {
+      if (_currentSortCriterion == criterion) {
+        // Jika kriteria sama, balik arahnya
+        _currentSortDirection = _currentSortDirection == SortDirection.ascending
+            ? SortDirection.descending
+            : SortDirection.ascending;
+      } else {
+        // Jika kriteria baru, set default ke ascending
+        _currentSortCriterion = criterion;
+        _currentSortDirection = SortDirection.ascending;
+      }
+      // Panggil fungsi sort setelah state diubah
+      _sortCourses();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => di.sl<TranskripBloc>()..add(const FetchTranskrip()),
+    // --- PERBAIKAN UTAMA: Menggunakan BlocProvider.value ---
+    // Menyediakan instance BLoC yang sudah ada ke widget tree di bawahnya.
+    return BlocProvider.value(
+      value: _transkripBloc,
       child: Scaffold(
         backgroundColor: const Color(0xFFFBFBFB),
         body: SafeArea(
@@ -38,25 +135,75 @@ class _TranskripPageState extends State<TranskripPage> {
             children: [
               _buildHeader(context),
               Expanded(
-                child: BlocBuilder<TranskripBloc, TranskripState>(
-                  builder: (context, state) {
-                    if (state is TranskripLoading) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF135EA2),
-                          ),
-                        ),
-                      );
-                    } else if (state is TranskripLoaded) {
-                      return _buildContent(context, state.transkrip);
-                    } else if (state is TranskripError) {
-                      return _buildErrorState(context, state.message);
+                // --- Menggunakan BlocListener untuk aksi sampingan seperti navigasi atau menampilkan SnackBar ---
+                child: BlocListener<TranskripBloc, TranskripState>(
+                  listener: (context, state) {
+                    if (state is TranskripLoaded) {
+                      // Hanya set data original saat data berhasil dimuat
+                      setState(() {
+                        _originalCourses = state.transkrip.courses;
+                        // --- FITUR BARU: Identifikasi MK ulang sebelum mengurutkan ---
+                        _identifyRepeatedCourses(_originalCourses);
+                        _sortCourses(); // Lakukan pengurutan awal (default)
+                      });
                     }
-                    return const Center(
-                      child: Text("Memuat data transkrip..."),
-                    );
+
+                    // --- FITUR BARU: Menampilkan notifikasi (SnackBar) saat usulan berhasil atau gagal ---
+                    if (state is TranskripUpdateSuccess) {
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text('Status usulan berhasil diperbarui.'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                    }
+                    if (state is TranskripUpdateError) {
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: Text('Gagal: ${state.message}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                    }
                   },
+                  // --- Menggunakan BlocBuilder untuk membangun UI berdasarkan state BLoC ---
+                  child: BlocBuilder<TranskripBloc, TranskripState>(
+                    builder: (context, state) {
+                      if (state is TranskripLoading &&
+                          _originalCourses.isEmpty) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF135EA2),
+                            ),
+                          ),
+                        );
+                      } else if (state is TranskripLoaded) {
+                        // Tampilkan konten menggunakan data yang sudah diurutkan
+                        return _buildContent(context, state.transkrip);
+                      } else if (state is TranskripError) {
+                        return _buildErrorState(context, state.message);
+                      }
+                      // Tampilkan konten terakhir yang valid jika ada, atau loading
+                      return _originalCourses.isNotEmpty
+                          ? _buildContent(
+                              context,
+                              Transkrip(
+                                ipk:
+                                    '', // Placeholder, karena data utama ada di _originalCourses
+                                totalSks: 0, // Placeholder
+                                courses: _originalCourses,
+                              ),
+                            )
+                          : const Center(
+                              child: Text("Memuat data transkrip..."),
+                            );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -114,7 +261,7 @@ class _TranskripPageState extends State<TranskripPage> {
                 letterSpacing: -0.18,
               ),
             ),
-            const SizedBox(width: 40), // Spacer for center alignment
+            const SizedBox(width: 40),
           ],
         ),
       ),
@@ -122,8 +269,6 @@ class _TranskripPageState extends State<TranskripPage> {
   }
 
   Widget _buildContent(BuildContext context, Transkrip transkrip) {
-    final filteredCourses = _filterCoursesBySemester(transkrip.courses);
-
     return Column(
       children: [
         Expanded(
@@ -132,19 +277,91 @@ class _TranskripPageState extends State<TranskripPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSemesterDropdown(),
-                const SizedBox(height: 20),
-                _buildSummaryCards(transkrip, filteredCourses),
+                _buildSummaryCards(
+                  transkrip,
+                  _originalCourses,
+                ), // Summary tetap dari data original
                 const SizedBox(height: 20),
                 const Divider(color: Color(0xFFE7E7E7), height: 1),
                 const SizedBox(height: 20),
-                _buildCourseList(filteredCourses),
+                _buildFilterChips(),
+                const SizedBox(height: 16),
+                _buildCourseList(
+                  _sortedCourses,
+                ), // Tampilkan data yang sudah diurutkan
               ],
             ),
           ),
         ),
         _buildDownloadButton(context),
       ],
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Urutkan Berdasarkan',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF121315),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildSortChip(SortCriterion.semester, 'Semester'),
+              _buildSortChip(SortCriterion.kode, 'Kode MK'),
+              _buildSortChip(SortCriterion.nama, 'Nama MK'),
+              _buildSortChip(SortCriterion.sks, 'SKS'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSortChip(SortCriterion criterion, String label) {
+    final bool isActive = _currentSortCriterion == criterion;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: ActionChip(
+        onPressed: () => _onSortChanged(criterion),
+        backgroundColor: isActive ? const Color(0xFF135EA2) : Colors.grey[200],
+        label: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? Colors.white : Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 4),
+              Icon(
+                _currentSortDirection == SortDirection.ascending
+                    ? Icons.arrow_upward
+                    : Icons.arrow_downward,
+                size: 14,
+                color: Colors.white,
+              ),
+            ],
+          ],
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: isActive ? const Color(0xFF135EA2) : Colors.grey[300]!,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
     );
   }
 
@@ -175,7 +392,8 @@ class _TranskripPageState extends State<TranskripPage> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
-              context.read<TranskripBloc>().add(const FetchTranskrip());
+              // Memanggil event untuk mencoba lagi menggunakan instance BLoC yang ada
+              _transkripBloc.add(const FetchTranskrip());
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF135EA2),
@@ -194,73 +412,16 @@ class _TranskripPageState extends State<TranskripPage> {
     );
   }
 
-  Widget _buildSemesterDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Pilih Semester',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF121315),
-            letterSpacing: -0.14,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE7E7E7)),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedSemester,
-              isExpanded: true,
-              icon: const Icon(
-                Icons.keyboard_arrow_down,
-                color: Color(0xFF121212),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF545556),
-                letterSpacing: -0.14,
-              ),
-              items: semesterOptions.map((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    selectedSemester = newValue;
-                  });
-                }
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCards(Transkrip transkrip, List<Course> filteredCourses) {
-    final totalSks = filteredCourses.fold<int>(
+  Widget _buildSummaryCards(Transkrip transkrip, List<Course> allCourses) {
+    final totalSks = allCourses.fold<int>(
       0,
-      (sum, course) => sum + course.sks,
+      (sum, course) => sum + (course.sks ?? 0),
     );
-    final totalBobot = filteredCourses.fold<double>(
+    final totalBobot = allCourses.fold<double>(
       0.0,
-      (sum, course) => sum + ((course.bobotNilai ?? 0) * course.sks),
+      (sum, course) => sum + ((course.bobotNilai ?? 0) * (course.sks ?? 0)),
     );
     final ipk = totalSks > 0 ? totalBobot / totalSks : 0.0;
-
     return Row(
       children: [
         Expanded(
@@ -290,14 +451,13 @@ class _TranskripPageState extends State<TranskripPage> {
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
-            'Tidak ada data mata kuliah untuk semester yang dipilih',
+            'Tidak ada data mata kuliah',
             style: TextStyle(fontSize: 14, color: Color(0xFF545556)),
             textAlign: TextAlign.center,
           ),
         ),
       );
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -309,10 +469,54 @@ class _TranskripPageState extends State<TranskripPage> {
           itemCount: courses.length,
           separatorBuilder: (context, index) => const SizedBox(height: 4),
           itemBuilder: (context, index) {
-            return _CourseTile(course: courses[index]);
+            final course = courses[index];
+            return _CourseTile(
+              course: course,
+              // --- PERUBAHAN: Kirim data & fungsi yang diperlukan ke tile ---
+              repeatedCourseCodes: _repeatedCourseCodes,
+              onProposeDeletion: (course) =>
+                  _showProposeDeletionDialog(context, course),
+            );
           },
         ),
       ],
+    );
+  }
+
+  // --- FUNGSI BARU: Menampilkan dialog konfirmasi untuk usulan hapus ---
+  void _showProposeDeletionDialog(BuildContext context, Course course) {
+    final isCurrentlyProposed = course.usulanHapus;
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text(
+            isCurrentlyProposed
+                ? 'Batalkan Usulan Hapus?'
+                : 'Usulkan Penghapusan?',
+          ),
+          content: Text(
+            'Mata kuliah ini akan ${isCurrentlyProposed ? 'dibatalkan dari daftar usulan' : 'diusulkan untuk'} dihapus oleh administrasi. Lanjutkan?',
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Batal'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+            TextButton(
+              child: const Text('Ya, Lanjutkan'),
+              onPressed: () {
+                // --- PERUBAHAN: Memanggil event BLoC saat tombol ditekan ---
+                // Menggunakan context.read karena BlocProvider ada di atas widget ini.
+                context.read<TranskripBloc>().add(
+                  ProposeDeletionToggled(courseToUpdate: course),
+                );
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -379,6 +583,20 @@ class _TranskripPageState extends State<TranskripPage> {
             width: 37,
             child: Text(
               'Bobot',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF024088),
+                letterSpacing: -0.12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // --- PERUBAHAN: Menambahkan header untuk kolom aksi ---
+          const SizedBox(
+            width: 48, // Lebar disesuaikan dengan IconButton
+            child: Text(
+              'Aksi',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -530,15 +748,6 @@ class _TranskripPageState extends State<TranskripPage> {
       },
     );
   }
-
-  List<Course> _filterCoursesBySemester(List<Course> courses) {
-    if (selectedSemester == 'Semua Semester') {
-      return courses;
-    }
-
-    // Simple filtering logic - can be enhanced based on actual semester data structure
-    return courses;
-  }
 }
 
 class _SummaryCard extends StatelessWidget {
@@ -592,23 +801,31 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
+// --- PERUBAHAN: Modifikasi _CourseTile untuk menerima data dan menampilkan tombol ---
 class _CourseTile extends StatelessWidget {
   final Course course;
+  final Set<String> repeatedCourseCodes;
+  final Function(Course) onProposeDeletion;
 
-  const _CourseTile({required this.course});
+  const _CourseTile({
+    required this.course,
+    required this.repeatedCourseCodes,
+    required this.onProposeDeletion,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bool isRepeated = repeatedCourseCodes.contains(course.kodeMataKuliah);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: course.usulanHapus ? Colors.red.withOpacity(0.1) : Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE7E7E7)),
       ),
       child: Row(
         children: [
-          // Semester number with circular background
           Container(
             width: 32,
             height: 32,
@@ -618,6 +835,7 @@ class _CourseTile extends StatelessWidget {
             ),
             child: Center(
               child: Text(
+                // --- PERBAIKAN KESALAHAN PENGETIKAN: 'semesterKe' menjadi 'semesterke' ---
                 course.semesterKe.toString(),
                 style: const TextStyle(
                   fontSize: 14,
@@ -629,7 +847,6 @@ class _CourseTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 24),
-          // Course info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,13 +864,13 @@ class _CourseTile extends StatelessWidget {
                 Row(
                   children: [
                     _InfoChip(
-                      text: '2020',
+                      text: course.kurikulum,
                       backgroundColor: const Color(0xFF135EA2),
                       textColor: const Color(0xFFFBFBFB),
                     ),
                     const SizedBox(width: 4),
                     _InfoChip(
-                      text: 'BD.5.101',
+                      text: course.kodeMataKuliah,
                       backgroundColor: const Color(0xFFA6DCFF),
                       textColor: const Color(0xFF121212),
                     ),
@@ -662,13 +879,12 @@ class _CourseTile extends StatelessWidget {
               ],
             ),
           ),
-          // SKS, Nilai, Bobot
           Row(
             children: [
               SizedBox(
                 width: 37,
                 child: Text(
-                  course.sks.toString(),
+                  (course.sks ?? 0).toString(),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -682,7 +898,7 @@ class _CourseTile extends StatelessWidget {
               SizedBox(
                 width: 37,
                 child: Text(
-                  course.nilai ?? 'null',
+                  course.nilai ?? '-',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -705,6 +921,27 @@ class _CourseTile extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
+              ),
+              // --- FITUR BARU: Menampilkan tombol usulan hapus ---
+              SizedBox(
+                width: 48, // Lebar disesuaikan dengan header
+                child: isRepeated
+                    ? IconButton(
+                        icon: Icon(
+                          course.usulanHapus
+                              ? Icons.undo
+                              : Icons.delete_outline,
+                          color: course.usulanHapus
+                              ? Colors.orange
+                              : Colors.red,
+                          size: 20,
+                        ),
+                        onPressed: () => onProposeDeletion(course),
+                        tooltip: course.usulanHapus
+                            ? 'Batalkan usulan hapus'
+                            : 'Usulkan untuk dihapus',
+                      )
+                    : null, // Tidak menampilkan tombol jika bukan MK ulang
               ),
             ],
           ),
