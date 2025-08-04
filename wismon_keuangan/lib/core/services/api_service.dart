@@ -312,6 +312,19 @@ class ApiService {
     }
   }
 
+  Future<List<PaymentTypeModel>> getPaymentTypes({
+    bool forceRefresh = false,
+  }) async {
+    final data = await get('/api/payments/types', useCache: !forceRefresh);
+
+    if (data['success']) {
+      final List<dynamic> typesData = data['data'];
+      return typesData.map((item) => PaymentTypeModel.fromJson(item)).toList();
+    } else {
+      throw Exception(data['message'] ?? 'Failed to get payment types');
+    }
+  }
+
   Map<String, dynamic> _handleResponse(http.Response response) {
     final responseData = jsonDecode(response.body) as Map<String, dynamic>;
 

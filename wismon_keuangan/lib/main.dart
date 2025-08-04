@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/di/injection_container.dart' as di;
 import 'features/auth/presentation/bloc/auth_bloc.dart';
@@ -38,12 +38,34 @@ void main() async {
 }
 
 Future<void> _initializeTheme() async {
-  // Pre-load and cache the Google Font to prevent lag
-  _cachedTextTheme = GoogleFonts.plusJakartaSansTextTheme();
+  const String fontName = 'Plus Jakarta Sans';
+
+  // Create a custom TextTheme using the local font
+  _cachedTextTheme = const TextTheme(
+    displayLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w800),
+    displayMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
+    displaySmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
+    headlineLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w800),
+    headlineMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
+    headlineSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
+    titleLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
+    titleMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
+    titleSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w500),
+    bodyLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+    bodyMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+    bodySmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+    labelLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
+    labelMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w500),
+    labelSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+  ).apply(
+    bodyColor: const Color(0xFF121212),
+    displayColor: const Color(0xFF121212),
+  );
 
   _cachedThemeData = ThemeData(
     primarySwatch: Colors.blue,
     textTheme: _cachedTextTheme,
+    fontFamily: fontName, // Set the default font family
     visualDensity: VisualDensity.adaptivePlatformDensity,
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {

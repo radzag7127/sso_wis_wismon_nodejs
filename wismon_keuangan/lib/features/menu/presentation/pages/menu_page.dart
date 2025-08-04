@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wismon_keuangan/features/payment/presentation/pages/wismon_page.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_event.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 
 // IMPORT UNTUK FITUR KRS
 import 'package:wismon_keuangan/features/krs/presentation/pages/krs_page.dart';
@@ -86,7 +84,7 @@ class MenuPage extends StatelessWidget {
                 ],
               ),
               child: IconButton(
-                onPressed: () => _showSettingsLogoutSheet(context),
+                onPressed: () => _navigateToSettings(context),
                 icon: const Icon(
                   Icons.settings,
                   color: Color(0xFF121212),
@@ -101,60 +99,10 @@ class MenuPage extends StatelessWidget {
     );
   }
 
-  void _showSettingsLogoutSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext sheetContext) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Pengaturan',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Aplikasi WHN Mobile adalah sebuah aplikasi sistem informasi layanan terpadu yang memberikan kemudahan akses akan informasi dan layanan bagi seluruh pengguna layanan Sistem Informasi Wira Husada Nusantara yang menggunakan perangkat mobile.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  context.read<AuthBloc>().add(const LogoutRequestedEvent());
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF207BB5),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text(
-                  'Keluar Akun',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(sheetContext),
-                child: const Text(
-                  'Batal',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  void _navigateToSettings(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const SettingsPage()));
   }
 
   Widget _buildMenuItems(BuildContext context) {

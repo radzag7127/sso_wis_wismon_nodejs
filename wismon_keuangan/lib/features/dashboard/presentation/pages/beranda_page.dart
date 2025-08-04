@@ -15,6 +15,7 @@ import '../bloc/beranda_bloc.dart';
 import '../bloc/beranda_event.dart';
 import '../bloc/beranda_state.dart';
 import '../../domain/entities/beranda.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 
 class BerandaPage extends StatefulWidget {
   const BerandaPage({super.key});
@@ -281,7 +282,7 @@ class _BerandaPageState extends State<BerandaPage> with WidgetsBindingObserver {
             ),
             child: IconButton(
               onPressed: () {
-                _showSettingsBottomSheet(context);
+                _navigateToSettings();
               },
               icon: const Icon(
                 Icons.settings,
@@ -840,63 +841,9 @@ class _BerandaPageState extends State<BerandaPage> with WidgetsBindingObserver {
     );
   }
 
-  void _showSettingsBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext sheetContext) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Pengaturan Aplikasi',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Kelola pengaturan dan preferensi aplikasi Anda di sini.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Fitur pengaturan akan segera tersedia'),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF207BB5),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text(
-                  'Pengaturan',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(sheetContext),
-                child: const Text(
-                  'Tutup',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  void _navigateToSettings() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (context) => const SettingsPage()));
   }
 }
