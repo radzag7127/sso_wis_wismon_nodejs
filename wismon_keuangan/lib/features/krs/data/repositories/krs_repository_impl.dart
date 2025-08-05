@@ -12,9 +12,10 @@ class KrsRepositoryImpl implements KrsRepository {
   KrsRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<Either<Failure, Krs>> getKrs(int semesterKe) async {
+  // PERBAIKAN: Update implementasi method
+  Future<Either<Failure, Krs>> getKrs(int semesterKe, int jenisSemester) async {
     try {
-      final krsModel = await remoteDataSource.getKrs(semesterKe);
+      final krsModel = await remoteDataSource.getKrs(semesterKe, jenisSemester);
       return Right(krsModel);
     } catch (e) {
       return Left(ServerFailure(e.toString().replaceAll('Exception: ', '')));

@@ -5,5 +5,6 @@ import '../../../../core/error/failures.dart';
 import '../entities/krs.dart';
 
 abstract class KrsRepository {
-  Future<Either<Failure, Krs>> getKrs(int semesterKe);
+  // PERBAIKAN: Update signature method
+  Future<Either<Failure, Krs>> getKrs(int semesterKe, int jenisSemester);
 }

@@ -12,9 +12,10 @@ class KhsRepositoryImpl implements KhsRepository {
   KhsRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<Either<Failure, Khs>> getKhs(int semesterKe) async {
+  // PERBAIKAN: Update implementasi method
+  Future<Either<Failure, Khs>> getKhs(int semesterKe, int jenisSemester) async {
     try {
-      final khsModel = await remoteDataSource.getKhs(semesterKe);
+      final khsModel = await remoteDataSource.getKhs(semesterKe, jenisSemester);
       return Right(khsModel);
     } catch (e) {
       return Left(ServerFailure(e.toString().replaceAll('Exception: ', '')));

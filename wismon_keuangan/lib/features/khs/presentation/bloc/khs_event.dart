@@ -11,9 +11,12 @@ abstract class KhsEvent extends Equatable {
 
 class FetchKhsData extends KhsEvent {
   final int semesterKe;
+  // PERBAIKAN: Tambahkan parameter jenisSemester
+  final int jenisSemester;
 
-  const FetchKhsData({required this.semesterKe});
+  const FetchKhsData({required this.semesterKe, required this.jenisSemester});
 
   @override
-  List<Object> get props => [semesterKe];
+  // PERBAIKAN: Tambahkan jenisSemester ke props
+  List<Object> get props => [semesterKe, jenisSemester];
 }

@@ -25,6 +25,54 @@ export class AkademikController {
     }
   }
 
+
+
+
+
+
+  async getMahasiswaInfo(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as any).user as JWTPayload;
+      if (!user || !user.nrm) {
+        res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
+        return;
+      }
+
+      const nrm = user.nrm;
+      const data = await akademikService.getMahasiswaInfo(nrm);
+
+      res.status(200).json({
+        success: true,
+        message: 'Informasi mahasiswa berhasil diambil',
+        data: data,
+      } as ApiResponse);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
+      res.status(statusCode).json({
+        success: false,
+        message: 'Gagal mengambil informasi mahasiswa',
+        errors: [errorMessage],
+      });
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   async getTranskrip(req: Request, res: Response): Promise<void> {
     try {
         // 1. Ambil data pengguna dari token yang sudah diproses oleh middleware 'authenticateToken'
@@ -115,82 +163,59 @@ export class AkademikController {
       }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /**
      * Controller untuk mengambil Kartu Hasil Studi (KHS).
      * Disesuaikan agar konsisten dengan getKrs.
      */
     async getKhs(req: Request, res: Response): Promise<void> {
       try {
-          // 1. Ambil data pengguna dari token JWT
-          const user = (req as any).user as JWTPayload;
-          if (!user || !user.nrm) {
-              res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
-              return;
-          }
-          const nrm = user.nrm;
-
-          // 2. Ambil parameter 'semesterKe' dari query URL (contoh: /khs?semesterKe=3)
-          const { semesterKe } = req.query;
-
-          // 3. Validasi input 'semesterKe'
-          if (!semesterKe) {
-              res.status(400).json({
-                  success: false,
-                  message: 'Parameter semesterKe wajib diisi pada query URL.',
-              });
-              return;
-          }
-
-          const semesterKeNum = parseInt(semesterKe as string, 10);
-          if (isNaN(semesterKeNum)) {
-              res.status(400).json({
-                  success: false,
-                  message: 'Parameter semesterKe harus berupa angka.',
-              });
-              return;
-          }
-
-          // 4. Panggil service dengan parameter yang sudah divalidasi
-          const data = await akademikService.getKhs(nrm, semesterKeNum);
-
-          // 5. Kirim respons sukses
-          res.status(200).json({
-              success: true,
-              message: `KHS semester ${semesterKeNum} berhasil diambil`,
-              data: data,
+        const user = (req as any).user as JWTPayload;
+        if (!user || !user.nrm) {
+          res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
+          return;
+        }
+        const nrm = user.nrm;
+  
+        // PERUBAHAN: Ambil 'semesterKe' dan 'jenisSemester' dari query
+        const { semesterKe, jenisSemester } = req.query;
+  
+        if (!semesterKe || !jenisSemester) {
+          res.status(400).json({
+            success: false,
+            message: "Parameter 'semesterKe' dan 'jenisSemester' wajib diisi.",
           });
-
+          return;
+        }
+  
+        const semesterKeNum = parseInt(semesterKe as string, 10);
+        const jenisSemesterNum = parseInt(jenisSemester as string, 10);
+  
+        if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
+          res.status(400).json({
+            success: false,
+            message: "Parameter 'semesterKe' dan 'jenisSemester' harus berupa angka.",
+          });
+          return;
+        }
+  
+        // Panggil service dengan parameter yang sudah divalidasi
+        const data = await akademikService.getKhs(nrm, semesterKeNum, jenisSemesterNum);
+  
+        res.status(200).json({
+          success: true,
+          message: `KHS berhasil diambil`,
+          data: data,
+        });
       } catch (error) {
-          // 6. Tangani error dari service
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          // Jika pesan error mengandung 'ditemukan', anggap sebagai 404 Not Found
-          const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
-          
-          res.status(statusCode).json({
-              success: false,
-              message: 'Gagal mengambil data KHS',
-              errors: [errorMessage],
-          });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
+        res.status(statusCode).json({
+          success: false,
+          message: 'Gagal mengambil data KHS',
+          errors: [errorMessage],
+        });
       }
-  }
+    }
 
   async getKrs(req: Request, res: Response): Promise<void> {
     try {
@@ -200,28 +225,32 @@ export class AkademikController {
         return;
       }
       const nrm = user.nrm;
-      
-      const { semesterKe } = req.query;
 
-      if (!semesterKe) {
+      // PERUBAHAN: Ambil 'semesterKe' dan 'jenisSemester' dari query
+      const { semesterKe, jenisSemester } = req.query;
+
+      // Validasi kedua parameter
+      if (!semesterKe || !jenisSemester) {
         res.status(400).json({
           success: false,
-          message: 'Parameter semesterKe wajib diisi pada query URL.',
+          message: "Parameter 'semesterKe' dan 'jenisSemester' wajib diisi.",
         });
         return;
       }
 
       const semesterKeNum = parseInt(semesterKe as string, 10);
-      if (isNaN(semesterKeNum)) {
+      const jenisSemesterNum = parseInt(jenisSemester as string, 10);
+
+      if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
         res.status(400).json({
           success: false,
-          message: 'Parameter semesterKe harus berupa angka.',
+          message: "Parameter 'semesterKe' dan 'jenisSemester' harus berupa angka.",
         });
         return;
       }
 
-      // Call the service with the simplified parameters
-      const data = await akademikService.getKrs(nrm, semesterKeNum);
+      // Panggil service dengan parameter yang sudah divalidasi
+      const data = await akademikService.getKrs(nrm, semesterKeNum, jenisSemesterNum);
 
       res.status(200).json({
         success: true,

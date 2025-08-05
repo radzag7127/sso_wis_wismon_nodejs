@@ -21,7 +21,13 @@ class KhsBloc extends Bloc<KhsEvent, KhsState> {
     Emitter<KhsState> emit,
   ) async {
     emit(KhsLoading());
-    final result = await getKhsUseCase(KhsParams(semesterKe: event.semesterKe));
+    // PERBAIKAN: Gunakan kedua parameter saat memanggil use case
+    final result = await getKhsUseCase(
+      KhsParams(
+        semesterKe: event.semesterKe,
+        jenisSemester: event.jenisSemester,
+      ),
+    );
     result.fold(
       (failure) => emit(KhsError(message: _mapFailureToMessage(failure))),
       (khs) => emit(KhsLoaded(khs: khs)),

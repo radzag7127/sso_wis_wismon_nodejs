@@ -1,5 +1,7 @@
 // lib/features/krs/presentation/bloc/krs_bloc.dart
 
+// lib/features/krs/presentation/bloc/krs_bloc.dart
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/error/failures.dart';
@@ -21,7 +23,13 @@ class KrsBloc extends Bloc<KrsEvent, KrsState> {
     Emitter<KrsState> emit,
   ) async {
     emit(KrsLoading());
-    final result = await getKrsUseCase(KrsParams(semesterKe: event.semesterKe));
+    // PERBAIKAN: Gunakan kedua parameter saat memanggil use case
+    final result = await getKrsUseCase(
+      KrsParams(
+        semesterKe: event.semesterKe,
+        jenisSemester: event.jenisSemester,
+      ),
+    );
     result.fold(
       (failure) => emit(KrsError(message: _mapFailureToMessage(failure))),
       (krs) => emit(KrsLoaded(krs: krs)),

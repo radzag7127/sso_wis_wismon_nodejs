@@ -14,15 +14,19 @@ class GetKrsUseCase implements UseCase<Krs, KrsParams> {
 
   @override
   Future<Either<Failure, Krs>> call(KrsParams params) async {
-    return await repository.getKrs(params.semesterKe);
+    // PERBAIKAN: Teruskan kedua parameter ke repository
+    return await repository.getKrs(params.semesterKe, params.jenisSemester);
   }
 }
 
 class KrsParams extends Equatable {
   final int semesterKe;
+  // PERBAIKAN: Tambahkan parameter jenisSemester
+  final int jenisSemester;
 
-  const KrsParams({required this.semesterKe});
+  const KrsParams({required this.semesterKe, required this.jenisSemester});
 
   @override
-  List<Object> get props => [semesterKe];
+  // PERBAIKAN: Tambahkan jenisSemester ke props
+  List<Object> get props => [semesterKe, jenisSemester];
 }

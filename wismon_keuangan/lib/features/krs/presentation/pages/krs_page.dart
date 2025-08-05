@@ -1,11 +1,12 @@
 // lib/features/krs/presentation/pages/krs_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
+import 'package:wismon_keuangan/core/services/api_service.dart';
 import '../../../../core/di/injection_container.dart' as di;
 import '../../domain/entities/krs.dart';
 import '../bloc/krs_bloc.dart';
+
+enum SemesterType { reguler, pendek }
 
 class KrsPage extends StatelessWidget {
   const KrsPage({super.key});
@@ -13,8 +14,7 @@ class KrsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          di.sl<KrsBloc>()..add(const FetchKrsData(semesterKe: 1)),
+      create: (context) => di.sl<KrsBloc>(),
       child: const KrsView(),
     );
   }
@@ -28,121 +28,244 @@ class KrsView extends StatefulWidget {
 }
 
 class _KrsViewState extends State<KrsView> {
-  int _selectedSemester = 1;
-  final int _selectedCourseType = 0; // 0 for Reguler, 1 for Pendek
-  final int latestSemesterForStudent = 6;
+  int? _selectedSemester;
+  int _latestSemesterForStudent = 1;
+  bool _isLoadingSemester = true;
+  String? _errorSemester;
   Krs? _lastLoadedKrs;
+  SemesterType _selectedType = SemesterType.reguler;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLatestSemester();
+  }
+
+  int _getJenisSemesterCode() {
+    if (_selectedSemester == null) return 1;
+    final bool isEven = _selectedSemester! % 2 == 0;
+    if (_selectedType == SemesterType.reguler) {
+      return isEven ? 2 : 1;
+    } else {
+      return isEven ? 4 : 5;
+    }
+  }
+
+  void _fetchData() {
+    if (_selectedSemester == null) return;
+    context.read<KrsBloc>().add(
+      FetchKrsData(
+        semesterKe: _selectedSemester!,
+        jenisSemester: _getJenisSemesterCode(),
+      ),
+    );
+  }
+
+  Future<void> _fetchLatestSemester() async {
+    try {
+      final apiService = di.sl<ApiService>();
+      final response = await apiService.get('/api/akademik/mahasiswa/info');
+      if (mounted && response['success'] == true) {
+        setState(() {
+          _latestSemesterForStudent = response['data']['semester'] ?? 1;
+          _selectedSemester = 1;
+          _isLoadingSemester = false;
+        });
+        _fetchData();
+      } else {
+        throw Exception(response['message'] ?? 'Gagal mengambil data semester');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorSemester = e.toString().replaceAll('Exception: ', '');
+          _isLoadingSemester = false;
+        });
+      }
+    }
+  }
 
   void _onSemesterChanged(int newSemester) {
-    if (newSemester >= 1 && newSemester <= latestSemesterForStudent) {
-      setState(() {
-        _selectedSemester = newSemester;
-      });
-      context.read<KrsBloc>().add(FetchKrsData(semesterKe: newSemester));
-    }
+    if (_selectedSemester == newSemester) return;
+    setState(() {
+      _selectedSemester = newSemester;
+      _lastLoadedKrs = null;
+    });
+    _fetchData();
+  }
+
+  void _onTypeChanged(SemesterType newType) {
+    if (_selectedType == newType) return;
+    setState(() {
+      _selectedType = newType;
+      _lastLoadedKrs = null;
+    });
+    _fetchData();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9),
-      appBar: AppBar(
-        title: const Text(
-          'Kartu Rencana Studi',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF135EA2),
-        foregroundColor: Colors.white,
-      ),
+      backgroundColor: const Color(0xFFFAFAFA),
       body: Column(
         children: [
-          _buildFilterAndToggleSection(),
-          Expanded(
-            child: BlocListener<KrsBloc, KrsState>(
-              listener: (context, state) {
-                if (state is KrsLoaded) {
-                  setState(() {
-                    _lastLoadedKrs = state.krs;
-                  });
-                }
-              },
-              child: BlocBuilder<KrsBloc, KrsState>(
-                builder: (context, state) {
-                  if (state is KrsLoading && _lastLoadedKrs == null) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (state is KrsError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Text(
-                          'Gagal memuat data: ${state.message}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (_lastLoadedKrs != null) {
-                    return Stack(
-                      children: [
-                        // Konten yang bisa di-scroll
-                        _buildKrsContent(context, _lastLoadedKrs!),
-
-                        // Overlay loading
-                        if (state is KrsLoading)
-                          Container(
-                            color: Colors.black.withOpacity(0.1),
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                      ],
-                    );
-                  }
-
-                  return const Center(
-                    child: Text("Pilih semester untuk memulai."),
-                  );
-                },
-              ),
-            ),
-          ),
+          _buildHeader(context),
+          Expanded(child: _buildBody()),
         ],
       ),
-      // --- PERUBAHAN UTAMA: Bottom Navigation Bar untuk Navigasi Semester ---
-      bottomNavigationBar: _lastLoadedKrs != null
-          ? _SemesterNavigator(
-              currentSemester: _selectedSemester,
-              maxSemester: latestSemesterForStudent,
-              onNavigate: _onSemesterChanged,
-            )
-          : null,
+      bottomNavigationBar: _buildBottomNavigator(),
     );
   }
 
-  Widget _buildFilterAndToggleSection() {
+  Widget _buildHeader(BuildContext context) {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      decoration: const BoxDecoration(
+        color: Color(0xFF135EA2),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: ShapeDecoration(
+                color: const Color(0xFFFAFAFA),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                shadows: const [
+                  BoxShadow(
+                    color: Color(0x0C000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF135EA2)),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            const Text(
+              'Kartu Rencana Studi',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFFAFAFA),
+                fontSize: 18,
+                fontFamily: 'Plus Jakarta Sans',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 40), // Spacer
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoadingSemester) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorSemester != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text('Error: $_errorSemester', textAlign: TextAlign.center),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        _buildFilterSection(),
+        Expanded(
+          child: BlocListener<KrsBloc, KrsState>(
+            listener: (context, state) {
+              if (state is KrsLoaded) {
+                setState(() => _lastLoadedKrs = state.krs);
+              }
+            },
+            child: BlocBuilder<KrsBloc, KrsState>(
+              builder: (context, state) {
+                if (state is KrsLoading && _lastLoadedKrs == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is KrsError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        'Gagal memuat data KRS: ${state.message}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                if (_lastLoadedKrs != null) {
+                  return Stack(
+                    children: [
+                      _buildKrsContent(context, _lastLoadedKrs!),
+                      if (state is KrsLoading)
+                        Container(
+                          color: Colors.black.withOpacity(0.1),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                    ],
+                  );
+                }
+                return const Center(
+                  child: Text("Pilih semester untuk melihat KRS."),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget? _buildBottomNavigator() {
+    if (!_isLoadingSemester &&
+        _lastLoadedKrs != null &&
+        _selectedSemester != null) {
+      return _SemesterNavigator(
+        currentSemester: _selectedSemester!,
+        maxSemester: _latestSemesterForStudent,
+        onNavigate: _onSemesterChanged,
+      );
+    }
+    return null;
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // PERUBAHAN: Posisi ditukar
           _SemesterFilter(
-            latestSemester: latestSemesterForStudent,
+            latestSemester: _latestSemesterForStudent,
             selectedSemester: _selectedSemester,
-            onChanged: _onSemesterChanged,
-          ),
-          const SizedBox(height: 16),
-          _CourseTypeToggle(
-            selectedIndex: _selectedCourseType,
-            onTap: (index) {
-              setState(() {
-                // _selectedCourseType = index;
-                // Logic for course type change can be added here
-              });
+            onChanged: (newVal) {
+              if (newVal != null) _onSemesterChanged(newVal);
             },
+          ),
+          const SizedBox(height: 12),
+          _SemesterTypeSelector(
+            selectedType: _selectedType,
+            onChanged: _onTypeChanged,
           ),
         ],
       ),
@@ -150,14 +273,8 @@ class _KrsViewState extends State<KrsView> {
   }
 
   Widget _buildKrsContent(BuildContext context, Krs krs) {
-    // Menggunakan SingleChildScrollView agar konten bisa di-scroll
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        16.0,
-        16.0,
-        16.0,
-        80.0,
-      ), // Padding bawah untuk ruang navigator
+      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 80.0),
       child: Column(
         children: [
           _KrsHeaderCard(krs: krs),
@@ -169,15 +286,98 @@ class _KrsViewState extends State<KrsView> {
   }
 }
 
-// --- WIDGET-WIDGET LAINNYA ---
+class _SemesterTypeSelector extends StatelessWidget {
+  final SemesterType selectedType;
+  final ValueChanged<SemesterType> onChanged;
+
+  const _SemesterTypeSelector({
+    required this.selectedType,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: ShapeDecoration(
+        color: const Color(0xFFF3F3F3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTypeButton(
+              context,
+              'Reguler',
+              SemesterType.reguler,
+              selectedType == SemesterType.reguler,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildTypeButton(
+              context,
+              'Pendek',
+              SemesterType.pendek,
+              selectedType == SemesterType.pendek,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypeButton(
+    BuildContext context,
+    String title,
+    SemesterType type,
+    bool isSelected,
+  ) {
+    return GestureDetector(
+      onTap: () => onChanged(type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 32,
+        decoration: ShapeDecoration(
+          color: isSelected ? const Color(0xFFFAFAFA) : const Color(0xFFF3F3F3),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          shadows: isSelected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x0C000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ]
+              : [],
+        ),
+        child: Center(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: isSelected
+                  ? const Color(0xFF1C1D1F)
+                  : const Color(0xFF858586),
+              fontSize: 14,
+              fontFamily: 'Plus Jakarta Sans',
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SemesterFilter extends StatelessWidget {
-  final int selectedSemester;
+  final int? selectedSemester;
   final int latestSemester;
-  final Function(int) onChanged;
+  final Function(int?) onChanged;
 
   const _SemesterFilter({
-    required this.selectedSemester,
+    this.selectedSemester,
     required this.latestSemester,
     required this.onChanged,
   });
@@ -188,14 +388,18 @@ class _SemesterFilter extends StatelessWidget {
       latestSemester,
       (index) => index + 1,
     );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Pilih Semester',
           style: TextStyle(
-            color: Colors.grey[700],
+            color: Color(0xFF1C1D1F),
+            fontSize: 14,
+            fontFamily: 'Plus Jakarta Sans',
             fontWeight: FontWeight.w500,
+            letterSpacing: -0.14,
           ),
         ),
         const SizedBox(height: 8),
@@ -203,27 +407,33 @@ class _SemesterFilter extends StatelessWidget {
           value: selectedSemester,
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.grey[50],
+            fillColor: Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: const BorderSide(color: Color(0xFFE7E7E7)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!),
+              borderSide: const BorderSide(color: Color(0xFFE7E7E7)),
             ),
+            contentPadding: const EdgeInsets.all(12),
           ),
           items: semesters.map((int value) {
             return DropdownMenuItem<int>(
               value: value,
-              child: Text('Semester $value'),
+              child: Text(
+                'Semester $value',
+                style: const TextStyle(
+                  color: Color(0xFF545556),
+                  fontSize: 14,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.14,
+                ),
+              ),
             );
           }).toList(),
-          onChanged: (int? newValue) {
-            if (newValue != null) {
-              onChanged(newValue);
-            }
-          },
+          onChanged: onChanged,
         ),
       ],
     );
@@ -234,7 +444,6 @@ class _SemesterNavigator extends StatelessWidget {
   final int currentSemester;
   final int maxSemester;
   final Function(int) onNavigate;
-
   const _SemesterNavigator({
     required this.currentSemester,
     required this.maxSemester,
@@ -245,12 +454,9 @@ class _SemesterNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool canGoBack = currentSemester > 1;
     final bool canGoForward = currentSemester < maxSemester;
-
     if (maxSemester <= 1) {
       return const SizedBox.shrink();
     }
-
-    // --- PERUBAHAN: Widget ini sekarang akan digunakan di bottomNavigationBar ---
     return Container(
       height: 60,
       color: Colors.white,
@@ -286,53 +492,8 @@ class _SemesterNavigator extends StatelessWidget {
   }
 }
 
-class _CourseTypeToggle extends StatelessWidget {
-  final int selectedIndex;
-  final Function(int) onTap;
-
-  const _CourseTypeToggle({required this.selectedIndex, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _buildToggleButton(context, 'Reguler', 0)),
-        Expanded(child: _buildToggleButton(context, 'Pendek', 1)),
-      ],
-    );
-  }
-
-  Widget _buildToggleButton(BuildContext context, String text, int index) {
-    final bool isSelected = selectedIndex == index;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF135EA2) : Colors.white,
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.horizontal(
-            left: index == 0 ? const Radius.circular(8) : Radius.zero,
-            right: index == 1 ? const Radius.circular(8) : Radius.zero,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF135EA2),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _KrsHeaderCard extends StatelessWidget {
   final Krs krs;
-
   const _KrsHeaderCard({required this.krs});
 
   @override
@@ -385,7 +546,6 @@ class _KrsHeaderCard extends StatelessWidget {
 
 class _MataKuliahList extends StatelessWidget {
   final List<KrsCourse> courses;
-
   const _MataKuliahList({required this.courses});
 
   @override
@@ -421,7 +581,6 @@ class _MataKuliahList extends StatelessWidget {
 
 class _MataKuliahTile extends StatelessWidget {
   final KrsCourse course;
-
   const _MataKuliahTile({required this.course});
 
   @override
@@ -432,32 +591,42 @@ class _MataKuliahTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         side: BorderSide(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               course.namaMataKuliah,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+                letterSpacing: -0.16,
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
-              spacing: 8.0,
+              spacing: 4.0,
               runSpacing: 4.0,
               children: [
                 _InfoChip(
                   text: '${course.sks} SKS',
-                  backgroundColor: const Color(0xFF0D6EFD),
+                  backgroundColor: const Color(0xFF207BB5),
                   textColor: Colors.white,
                 ),
                 _InfoChip(
                   text: course.kodeMataKuliah,
-                  backgroundColor: const Color(0xFFD1E9FF),
-                  textColor: const Color(0xFF0D6EFD),
+                  backgroundColor: const Color(0xFFA5DCFF),
+                  textColor: const Color(0xFF121111),
                 ),
+                if (course.kelas != null)
+                  _InfoChip(
+                    text: 'KELAS ${course.kelas}',
+                    backgroundColor: const Color(0xFF135EA2),
+                    textColor: Colors.white,
+                  ),
               ],
             ),
           ],
@@ -471,27 +640,29 @@ class _InfoChip extends StatelessWidget {
   final String text;
   final Color backgroundColor;
   final Color textColor;
-
   const _InfoChip({
     required this.text,
     required this.backgroundColor,
     required this.textColor,
   });
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         text,
+        textAlign: TextAlign.center,
         style: TextStyle(
           color: textColor,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
+          fontSize: 9,
+          fontFamily: 'Plus Jakarta Sans',
+          fontWeight: FontWeight.w700,
+          height: 1.78,
+          letterSpacing: 1,
         ),
       ),
     );

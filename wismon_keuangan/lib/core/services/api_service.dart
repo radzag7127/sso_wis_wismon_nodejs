@@ -348,9 +348,10 @@ class ApiService {
   }
 
   // --- AKADEMIK METHODS ---
-  Future<KrsModel> getKrs(int semesterKe) async {
+  Future<KrsModel> getKrs(int semesterKe, int jenisSemester) async {
+    // PERBAIKAN: Tambahkan parameter jenisSemester ke endpoint
     final data = await get(
-      '/api/akademik/mahasiswa/krs?semesterKe=$semesterKe',
+      '/api/akademik/mahasiswa/krs?semesterKe=$semesterKe&jenisSemester=$jenisSemester',
     );
     if (data['success'] == true) {
       return KrsModel.fromJson(data['data']);
@@ -359,9 +360,10 @@ class ApiService {
     }
   }
 
-  Future<KhsModel> getKhs(int semesterKe) async {
+  Future<KhsModel> getKhs(int semesterKe, int jenisSemester) async {
+    // PERBAIKAN: Tambahkan parameter jenisSemester ke endpoint
     final data = await get(
-      '/api/akademik/mahasiswa/khs?semesterKe=$semesterKe',
+      '/api/akademik/mahasiswa/khs?semesterKe=$semesterKe&jenisSemester=$jenisSemester',
     );
     if (data['success'] == true) {
       return KhsModel.fromJson(data['data']);

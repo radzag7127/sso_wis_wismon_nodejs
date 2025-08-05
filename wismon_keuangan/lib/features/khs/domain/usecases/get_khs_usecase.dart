@@ -14,15 +14,19 @@ class GetKhsUseCase implements UseCase<Khs, KhsParams> {
 
   @override
   Future<Either<Failure, Khs>> call(KhsParams params) async {
-    return await repository.getKhs(params.semesterKe);
+    // PERBAIKAN: Teruskan kedua parameter ke repository
+    return await repository.getKhs(params.semesterKe, params.jenisSemester);
   }
 }
 
 class KhsParams extends Equatable {
   final int semesterKe;
+  // PERBAIKAN: Tambahkan parameter jenisSemester
+  final int jenisSemester;
 
-  const KhsParams({required this.semesterKe});
+  const KhsParams({required this.semesterKe, required this.jenisSemester});
 
   @override
-  List<Object> get props => [semesterKe];
+  // PERBAIKAN: Tambahkan jenisSemester ke props
+  List<Object> get props => [semesterKe, jenisSemester];
 }

@@ -5,5 +5,6 @@ import '../../../../core/error/failures.dart';
 import '../entities/khs.dart';
 
 abstract class KhsRepository {
-  Future<Either<Failure, Khs>> getKhs(int semesterKe);
+  // PERBAIKAN: Update signature method
+  Future<Either<Failure, Khs>> getKhs(int semesterKe, int jenisSemester);
 }

@@ -11,9 +11,12 @@ abstract class KrsEvent extends Equatable {
 
 class FetchKrsData extends KrsEvent {
   final int semesterKe;
+  // PERBAIKAN: Tambahkan parameter jenisSemester
+  final int jenisSemester;
 
-  const FetchKrsData({required this.semesterKe});
+  const FetchKrsData({required this.semesterKe, required this.jenisSemester});
 
   @override
-  List<Object> get props => [semesterKe];
+  // PERBAIKAN: Tambahkan jenisSemester ke props
+  List<Object> get props => [semesterKe, jenisSemester];
 }

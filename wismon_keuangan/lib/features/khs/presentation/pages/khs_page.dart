@@ -1,11 +1,12 @@
 // lib/features/khs/presentation/pages/khs_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
+import 'package:wismon_keuangan/core/services/api_service.dart';
 import '../../../../core/di/injection_container.dart' as di;
 import '../../domain/entities/khs.dart';
 import '../bloc/khs_bloc.dart';
+
+enum SemesterType { reguler, pendek }
 
 class KhsPage extends StatelessWidget {
   const KhsPage({super.key});
@@ -13,8 +14,7 @@ class KhsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          di.sl<KhsBloc>()..add(const FetchKhsData(semesterKe: 1)),
+      create: (context) => di.sl<KhsBloc>(),
       child: const KhsView(),
     );
   }
@@ -28,126 +28,244 @@ class KhsView extends StatefulWidget {
 }
 
 class _KhsViewState extends State<KhsView> {
-  int _selectedSemester = 1;
-  final int _selectedCourseType = 0; // 0 for Reguler, 1 for Pendek
-  final int latestSemesterForStudent = 6;
-  Khs? _lastLoadedKhs; // To store the last successfully loaded data
+  int? _selectedSemester;
+  int _latestSemesterForStudent = 1;
+  bool _isLoadingSemester = true;
+  String? _errorSemester;
+  Khs? _lastLoadedKhs;
+  SemesterType _selectedType = SemesterType.reguler;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLatestSemester();
+  }
+
+  int _getJenisSemesterCode() {
+    if (_selectedSemester == null) return 1;
+    final bool isEven = _selectedSemester! % 2 == 0;
+    if (_selectedType == SemesterType.reguler) {
+      return isEven ? 2 : 1;
+    } else {
+      return isEven ? 4 : 5;
+    }
+  }
+
+  void _fetchData() {
+    if (_selectedSemester == null) return;
+    context.read<KhsBloc>().add(
+      FetchKhsData(
+        semesterKe: _selectedSemester!,
+        jenisSemester: _getJenisSemesterCode(),
+      ),
+    );
+  }
+
+  Future<void> _fetchLatestSemester() async {
+    try {
+      final apiService = di.sl<ApiService>();
+      final response = await apiService.get('/api/akademik/mahasiswa/info');
+      if (mounted && response['success'] == true) {
+        setState(() {
+          _latestSemesterForStudent = response['data']['semester'] ?? 1;
+          _selectedSemester = 1;
+          _isLoadingSemester = false;
+        });
+        _fetchData();
+      } else {
+        throw Exception(response['message'] ?? 'Gagal mengambil data semester');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorSemester = e.toString().replaceAll('Exception: ', '');
+          _isLoadingSemester = false;
+        });
+      }
+    }
+  }
 
   void _onSemesterChanged(int newSemester) {
-    if (newSemester >= 1 && newSemester <= latestSemesterForStudent) {
-      setState(() {
-        _selectedSemester = newSemester;
-      });
-      context.read<KhsBloc>().add(FetchKhsData(semesterKe: newSemester));
-    }
+    if (_selectedSemester == newSemester) return;
+    setState(() {
+      _selectedSemester = newSemester;
+      _lastLoadedKhs = null;
+    });
+    _fetchData();
+  }
+
+  void _onTypeChanged(SemesterType newType) {
+    if (_selectedType == newType) return;
+    setState(() {
+      _selectedType = newType;
+      _lastLoadedKhs = null;
+    });
+    _fetchData();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9),
-      appBar: AppBar(
-        title: const Text(
-          'Kartu Hasil Studi',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF135EA2),
-        foregroundColor: Colors.white,
-        elevation: 1,
-      ),
+      backgroundColor: const Color(0xFFFAFAFA),
       body: Column(
         children: [
-          _buildFilterAndToggleSection(),
-          Expanded(
-            child: BlocListener<KhsBloc, KhsState>(
-              listener: (context, state) {
-                if (state is KhsLoaded) {
-                  setState(() {
-                    _lastLoadedKhs = state.khs;
-                  });
-                }
-              },
-              child: BlocBuilder<KhsBloc, KhsState>(
-                builder: (context, state) {
-                  if (state is KhsLoading && _lastLoadedKhs == null) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (state is KhsError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Text(
-                          'Gagal memuat data: ${state.message}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  if (_lastLoadedKhs != null) {
-                    return Stack(
-                      children: [
-                        _buildKhsContent(context, _lastLoadedKhs!),
-                        if (state is KhsLoading)
-                          Container(
-                            color: Colors.black.withOpacity(0.1),
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                      ],
-                    );
-                  }
-
-                  return const Center(
-                    child: Text("Pilih semester untuk memulai."),
-                  );
-                },
-              ),
-            ),
-          ),
+          _buildHeader(context),
+          Expanded(child: _buildBody()),
         ],
       ),
-      // --- PERUBAHAN UTAMA: Bottom Navigation Bar untuk Navigasi Semester ---
-      bottomNavigationBar: _lastLoadedKhs != null
-          ? _SemesterNavigator(
-              currentSemester: _selectedSemester,
-              maxSemester: latestSemesterForStudent,
-              onNavigate: _onSemesterChanged,
-            )
-          : null,
+      bottomNavigationBar: _buildBottomNavigator(),
     );
   }
 
-  Widget _buildFilterAndToggleSection() {
+  Widget _buildHeader(BuildContext context) {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Pilih Semester',
-            style: TextStyle(
-              color: Color(0xFF545556),
-              fontWeight: FontWeight.w500,
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      decoration: const BoxDecoration(
+        color: Color(0xFF135EA2),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(16),
+          bottomRight: Radius.circular(16),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: ShapeDecoration(
+                color: const Color(0xFFFAFAFA),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                shadows: const [
+                  BoxShadow(
+                    color: Color(0x0C000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF135EA2)),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            const Text(
+              'Kartu Hasil Studi',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFFFAFAFA),
+                fontSize: 18,
+                fontFamily: 'Plus Jakarta Sans',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 40), // Spacer
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoadingSemester) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorSemester != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text('Error: $_errorSemester', textAlign: TextAlign.center),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        _buildFilterSection(),
+        Expanded(
+          child: BlocListener<KhsBloc, KhsState>(
+            listener: (context, state) {
+              if (state is KhsLoaded) {
+                setState(() => _lastLoadedKhs = state.khs);
+              }
+            },
+            child: BlocBuilder<KhsBloc, KhsState>(
+              builder: (context, state) {
+                if (state is KhsLoading && _lastLoadedKhs == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is KhsError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        'Gagal memuat data KHS: ${state.message}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                if (_lastLoadedKhs != null) {
+                  return Stack(
+                    children: [
+                      _buildKhsContent(context, _lastLoadedKhs!),
+                      if (state is KhsLoading)
+                        Container(
+                          color: Colors.black.withOpacity(0.1),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                    ],
+                  );
+                }
+                return const Center(
+                  child: Text("Pilih semester untuk melihat KHS."),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 8),
+        ),
+      ],
+    );
+  }
+
+  Widget? _buildBottomNavigator() {
+    if (!_isLoadingSemester &&
+        _lastLoadedKhs != null &&
+        _selectedSemester != null) {
+      return _SemesterNavigator(
+        currentSemester: _selectedSemester!,
+        maxSemester: _latestSemesterForStudent,
+        onNavigate: _onSemesterChanged,
+      );
+    }
+    return null;
+  }
+
+  Widget _buildFilterSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // PERUBAHAN: Posisi ditukar
           _SemesterFilter(
-            latestSemester: latestSemesterForStudent,
+            latestSemester: _latestSemesterForStudent,
             selectedSemester: _selectedSemester,
-            onChanged: _onSemesterChanged,
-          ),
-          const SizedBox(height: 16),
-          _CourseTypeToggle(
-            selectedIndex: _selectedCourseType,
-            onTap: (index) {
-              setState(() {
-                // _selectedCourseType = index;
-              });
+            onChanged: (newVal) {
+              if (newVal != null) _onSemesterChanged(newVal);
             },
+          ),
+          const SizedBox(height: 12),
+          _SemesterTypeSelector(
+            selectedType: _selectedType,
+            onChanged: _onTypeChanged,
           ),
         ],
       ),
@@ -156,7 +274,12 @@ class _KhsViewState extends State<KhsView> {
 
   Widget _buildKhsContent(BuildContext context, Khs khs) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
+      padding: const EdgeInsets.fromLTRB(
+        16.0,
+        0,
+        16.0,
+        80.0,
+      ), // Removed top padding
       child: Column(
         children: [
           _RekapitulasiCard(rekap: khs.rekapitulasi),
@@ -168,55 +291,156 @@ class _KhsViewState extends State<KhsView> {
   }
 }
 
-// --- WIDGET-WIDGET LAINNYA ---
+class _SemesterTypeSelector extends StatelessWidget {
+  final SemesterType selectedType;
+  final ValueChanged<SemesterType> onChanged;
 
-class _SemesterFilter extends StatelessWidget {
-  final int selectedSemester;
-  final int latestSemester;
-  final Function(int) onChanged;
-
-  const _SemesterFilter({
-    required this.selectedSemester,
+  const _SemesterTypeSelector({
+    required this.selectedType,
     required this.onChanged,
-    required this.latestSemester,
   });
 
   @override
   Widget build(BuildContext context) {
-    final List<String> semesterLabels = List.generate(
-      latestSemester,
-      (index) => 'Semester ${index + 1}',
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
+      decoration: ShapeDecoration(
+        color: const Color(0xFFF3F3F3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTypeButton(
+              context,
+              'Reguler',
+              SemesterType.reguler,
+              selectedType == SemesterType.reguler,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildTypeButton(
+              context,
+              'Pendek',
+              SemesterType.pendek,
+              selectedType == SemesterType.pendek,
+            ),
+          ),
+        ],
+      ),
     );
+  }
 
-    return DropdownButtonFormField<String>(
-      value: 'Semester $selectedSemester',
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey[300]!),
+  Widget _buildTypeButton(
+    BuildContext context,
+    String title,
+    SemesterType type,
+    bool isSelected,
+  ) {
+    return GestureDetector(
+      onTap: () => onChanged(type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 32,
+        decoration: ShapeDecoration(
+          color: isSelected ? const Color(0xFFFAFAFA) : const Color(0xFFF3F3F3),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          shadows: isSelected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x0C000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ]
+              : [],
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 16,
+        child: Center(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: isSelected
+                  ? const Color(0xFF1C1D1F)
+                  : const Color(0xFF858586),
+              fontSize: 14,
+              fontFamily: 'Plus Jakarta Sans',
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.14,
+            ),
+          ),
         ),
       ),
-      items: semesterLabels.map((String label) {
-        return DropdownMenuItem<String>(value: label, child: Text(label));
-      }).toList(),
-      onChanged: (String? newValue) {
-        if (newValue != null) {
-          final semester = int.tryParse(newValue.replaceAll('Semester ', ''));
-          if (semester != null) {
-            onChanged(semester);
-          }
-        }
-      },
+    );
+  }
+}
+
+class _SemesterFilter extends StatelessWidget {
+  final int? selectedSemester;
+  final int latestSemester;
+  final Function(int?) onChanged;
+
+  const _SemesterFilter({
+    this.selectedSemester,
+    required this.latestSemester,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final List<int> semesters = List.generate(
+      latestSemester,
+      (index) => index + 1,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pilih Semester',
+          style: TextStyle(
+            color: Color(0xFF1C1D1F),
+            fontSize: 14,
+            fontFamily: 'Plus Jakarta Sans',
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.14,
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          value: selectedSemester,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE7E7E7)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE7E7E7)),
+            ),
+            contentPadding: const EdgeInsets.all(12),
+          ),
+          items: semesters.map((int value) {
+            return DropdownMenuItem<int>(
+              value: value,
+              child: Text(
+                'Semester $value',
+                style: const TextStyle(
+                  color: Color(0xFF545556),
+                  fontSize: 14,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.14,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 }
@@ -225,7 +449,6 @@ class _SemesterNavigator extends StatelessWidget {
   final int currentSemester;
   final int maxSemester;
   final Function(int) onNavigate;
-
   const _SemesterNavigator({
     required this.currentSemester,
     required this.maxSemester,
@@ -236,11 +459,9 @@ class _SemesterNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool canGoBack = currentSemester > 1;
     final bool canGoForward = currentSemester < maxSemester;
-
     if (maxSemester <= 1) {
       return const SizedBox.shrink();
     }
-
     return Container(
       height: 60,
       color: Colors.white,
@@ -276,55 +497,9 @@ class _SemesterNavigator extends StatelessWidget {
   }
 }
 
-class _CourseTypeToggle extends StatelessWidget {
-  final int selectedIndex;
-  final Function(int) onTap;
-
-  const _CourseTypeToggle({required this.selectedIndex, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _buildToggleButton(context, 'Reguler', 0)),
-        Expanded(child: _buildToggleButton(context, 'Pendek', 1)),
-      ],
-    );
-  }
-
-  Widget _buildToggleButton(BuildContext context, String text, int index) {
-    final bool isSelected = selectedIndex == index;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF135EA2) : Colors.white,
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.horizontal(
-            left: index == 0 ? const Radius.circular(8) : Radius.zero,
-            right: index == 1 ? const Radius.circular(8) : Radius.zero,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF135EA2),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _RekapitulasiCard extends StatelessWidget {
   final Rekapitulasi rekap;
-
   const _RekapitulasiCard({required this.rekap});
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -372,9 +547,7 @@ class _RekapitulasiCard extends StatelessWidget {
 class _RekapItem extends StatelessWidget {
   final String title;
   final String value;
-
   const _RekapItem({required this.title, required this.value});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -414,9 +587,7 @@ class _RekapItem extends StatelessWidget {
 
 class _MataKuliahList extends StatelessWidget {
   final List<KhsCourse> courses;
-
   const _MataKuliahList({required this.courses});
-
   @override
   Widget build(BuildContext context) {
     if (courses.isEmpty) {
@@ -440,9 +611,7 @@ class _MataKuliahList extends StatelessWidget {
 
 class _MataKuliahTile extends StatelessWidget {
   final KhsCourse course;
-
   const _MataKuliahTile({required this.course});
-
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -504,9 +673,7 @@ class _MataKuliahTile extends StatelessWidget {
 
 class _InfoChip extends StatelessWidget {
   final String text;
-
   const _InfoChip({required this.text});
-
   @override
   Widget build(BuildContext context) {
     return Container(

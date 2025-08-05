@@ -4,7 +4,8 @@ import '../../../../core/services/api_service.dart';
 import '../models/khs_model.dart';
 
 abstract class KhsRemoteDataSource {
-  Future<KhsModel> getKhs(int semesterKe);
+  // PERBAIKAN: Update signature method
+  Future<KhsModel> getKhs(int semesterKe, int jenisSemester);
 }
 
 class KhsRemoteDataSourceImpl implements KhsRemoteDataSource {
@@ -13,14 +14,9 @@ class KhsRemoteDataSourceImpl implements KhsRemoteDataSource {
   KhsRemoteDataSourceImpl({required this.apiService});
 
   @override
-  Future<KhsModel> getKhs(int semesterKe) async {
-    final endpoint = '/api/akademik/mahasiswa/khs?semesterKe=$semesterKe';
-    final data = await apiService.get(endpoint);
-
-    if (data['success']) {
-      return KhsModel.fromJson(data['data']);
-    } else {
-      throw Exception(data['message'] ?? 'Gagal mengambil data KHS');
-    }
+  // PERBAIKAN: Update implementasi method
+  Future<KhsModel> getKhs(int semesterKe, int jenisSemester) async {
+    // Panggil method getKhs di ApiService yang sudah diperbarui
+    return await apiService.getKhs(semesterKe, jenisSemester);
   }
 }

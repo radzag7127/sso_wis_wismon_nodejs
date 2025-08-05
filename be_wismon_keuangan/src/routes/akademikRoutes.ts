@@ -10,6 +10,12 @@ const akademikController = new AkademikController();
 // Rute untuk mendapatkan daftar semua mahasiswa (contoh rute publik)
 router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa); //palingan gak dipakai, bisa dihapus harusnya?
 
+// Rute baru untuk mendapatkan info semester mahasiswa
+router.get('/mahasiswa/info', authenticateToken, akademikController.getMahasiswaInfo);
+
+
+
+
 // Rute untuk mendapatkan transkrip mahasiswa
 router.get('/mahasiswa/transkrip', authenticateToken, akademikController.getTranskrip);
 
