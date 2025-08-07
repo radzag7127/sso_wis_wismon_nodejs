@@ -1,14 +1,8 @@
-# Ignore node_modules for backend projects
-/be_wismon_keuangan_test/node_modules
-/be_wismon_keuangan/node_modules
-
-# Ignore Flutter build artifacts and temporary files
-/wismon_keuangan/.dart_tool/
-/wismon_keuangan/build/
-
 /page1login.txt
 /page2home.txt
 /page3wismon.txt
 /usebloc.txt
 
 /context
+/.claude
+/CLAUDE.md
