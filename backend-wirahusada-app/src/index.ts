@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { testConnections } from "./config/database";
+import { databaseMigration } from "./utils/migrations";
 import authRoutes from "./routes/authRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import akademikRoutes from "./routes/akademikRoutes";
@@ -138,6 +139,10 @@ async function startServer() {
     // Test database connections
     console.log("🔍 Testing database connections...");
     const dbResults = await testConnections();
+
+    // Run database migrations
+    console.log("🔧 Running database migrations...");
+    await databaseMigration.initialize();
 
     const successCount = Object.values(dbResults).filter(Boolean).length;
     const totalCount = Object.keys(dbResults).length;

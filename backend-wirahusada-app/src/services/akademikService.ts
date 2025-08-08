@@ -158,7 +158,8 @@ export class AkademikService {
       const sql = `
         SELECT
           mk.sks,
-          krs.bobotnilai
+          krs.bobotnilai,
+          COALESCE(krs.usulan_hapus, FALSE) AS usulan_hapus
         FROM
           krsmatakuliah AS krs
         JOIN
@@ -221,6 +222,7 @@ export class AkademikService {
   /**
    * Mengambil Kartu Hasil Studi (KHS) mahasiswa, lengkap dengan rekapitulasi IP dan SKS.
    * Fungsi ini mengadopsi struktur dari getKrs dan mengembangkannya untuk kebutuhan KHS.
+   * Updated: Handles usulan_hapus column gracefully
    */
   async getKhs(nrm: string, semesterKe: number, jenisSemester: number): Promise<Khs> {
     const query = `
@@ -234,7 +236,8 @@ export class AkademikService {
           mk.kdmk,
           mk.namamk,
           mk.sks,
-          kls.nama AS kelas
+          kls.nama AS kelas,
+          COALESCE(km.usulan_hapus, FALSE) AS usulan_hapus
       FROM
           krsmatakuliah km
       JOIN
@@ -342,6 +345,7 @@ export class AkademikService {
    * Mengambil Kartu Rencana Studi (KRS) per semester.
    * Query ini diperbaiki untuk menggunakan krs.tahun sebagai acuan join yang benar.
    * REVISED: This function now only requires semesterKe.
+   * Updated: Handles usulan_hapus column gracefully
    */
   async getKrs(nrm: string, semesterKe: number, jenisSemester: number): Promise<Krs> {
     // Logika penentuan jenis semester otomatis dihapus, karena sekarang diterima dari parameter.
@@ -354,7 +358,8 @@ export class AkademikService {
           mk.kdmk AS kodeMataKuliah,
           mk.namamk AS namaMataKuliah,
           mk.sks AS sks,
-          kls_mhs.nama AS kelas
+          kls_mhs.nama AS kelas,
+          COALESCE(krs_mk.usulan_hapus, FALSE) AS usulan_hapus
       FROM krs
       JOIN krsmatakuliah AS krs_mk ON krs.nrm = krs_mk.nrm
           AND krs.semesterke = krs_mk.semesterke
