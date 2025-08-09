@@ -3,6 +3,7 @@ import '../../../../core/di/injection_container.dart' as di;
 import '../../../../core/services/dashboard_preferences_service.dart';
 import '../../../../core/services/api_service.dart';
 import '../../domain/entities/payment.dart';
+import '../../constants.dart';
 
 class DashboardCustomizationPage extends StatefulWidget {
   const DashboardCustomizationPage({super.key});
@@ -43,12 +44,20 @@ class _DashboardCustomizationPageState
       // Load current user preferences
       final selectedTypes = await _preferencesService.getSelectedPaymentTypes();
 
+      if (!mounted) return;
       setState(() {
         _availablePaymentTypes = paymentTypes;
         _selectedPaymentTypes = List<String>.from(selectedTypes);
+
+        // Ensure SPP is always included in selected types
+        if (!_selectedPaymentTypes.contains(kMandatoryPaymentType)) {
+          _selectedPaymentTypes.add(kMandatoryPaymentType);
+        }
+
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Gagal memuat data: ${e.toString()}';
         _isLoading = false;
@@ -63,8 +72,14 @@ class _DashboardCustomizationPageState
         _errorMessage = null;
       });
 
+      // Ensure SPP is always included when saving
+      final typesToSave = List<String>.from(_selectedPaymentTypes);
+      if (!typesToSave.contains(kMandatoryPaymentType)) {
+        typesToSave.add(kMandatoryPaymentType);
+      }
+
       final success = await _preferencesService.saveSelectedPaymentTypes(
-        _selectedPaymentTypes,
+        typesToSave,
       );
 
       if (success) {
@@ -81,15 +96,18 @@ class _DashboardCustomizationPageState
           ); // Return true to indicate changes were made
         }
       } else {
+        if (!mounted) return;
         setState(() {
           _errorMessage = 'Gagal menyimpan pengaturan';
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Terjadi kesalahan: ${e.toString()}';
       });
     } finally {
+      if (!mounted) return;
       setState(() {
         _isSaving = false;
       });
@@ -97,6 +115,11 @@ class _DashboardCustomizationPageState
   }
 
   void _togglePaymentType(String paymentType) {
+    // Prevent SPP from being toggled off
+    if (paymentType == kMandatoryPaymentType) {
+      return;
+    }
+
     setState(() {
       if (_selectedPaymentTypes.contains(paymentType)) {
         _selectedPaymentTypes.remove(paymentType);
@@ -226,7 +249,7 @@ class _DashboardCustomizationPageState
           ),
           const SizedBox(height: 8),
           const Text(
-            'Pilih jenis pembayaran yang ingin ditampilkan di dashboard. Anda dapat memilih beberapa jenis sesuai kebutuhan.',
+            'Pilih jenis pembayaran yang ingin ditampilkan di dashboard. Anda dapat memilih beberapa jenis sesuai kebutuhan. SPP wajib ditampilkan dan tidak dapat diubah.',
             style: TextStyle(
               fontSize: 14,
               color: Color(0xFF6B7280),
@@ -253,13 +276,17 @@ class _DashboardCustomizationPageState
         const SizedBox(height: 12),
         ..._availablePaymentTypes.map((paymentType) {
           final isSelected = _selectedPaymentTypes.contains(paymentType.nama);
+          final isSPP = paymentType.nama == kMandatoryPaymentType;
+
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isSPP ? const Color(0xFFE8EBF0) : Colors.white,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isSelected
+                color: isSPP
+                    ? const Color(0xFFB0BCC9)
+                    : isSelected
                     ? const Color(0xFF135EA2)
                     : const Color(0xFFE7E7E7),
               ),
@@ -270,15 +297,19 @@ class _DashboardCustomizationPageState
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: isSelected
+                  color: isSPP
+                      ? const Color(0xFF6B7280)
+                      : isSelected
                       ? const Color(0xFF135EA2)
                       : const Color(0xFF1C1D1F),
                 ),
               ),
               value: isSelected,
-              onChanged: (bool? value) {
-                _togglePaymentType(paymentType.nama);
-              },
+              onChanged: isSPP
+                  ? null
+                  : (bool? value) {
+                      _togglePaymentType(paymentType.nama);
+                    },
               activeColor: const Color(0xFF135EA2),
               controlAffinity: ListTileControlAffinity.trailing,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
