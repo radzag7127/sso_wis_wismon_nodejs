@@ -3,12 +3,9 @@ import { User, Student, LoginRequest, LoginResponse } from "../types";
 import { generateToken } from "../utils/auth";
 
 export class AuthService {
-  /**
-   * Find student by name or NIM and NRM
-   */
+  // #1 Temporary login function, will be replaced with SSO login for the next stage development
   async findStudent(namam_nim: string, nrm: string): Promise<Student | null> {
     try {
-      // Try to find student by NIM first
       let query = `
         SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
         FROM mahasiswa 
@@ -19,7 +16,6 @@ export class AuthService {
       if (results.length > 0) {
         return results[0] as Student;
       }
-
       // If not found by NIM, try by student name (exact match, case-insensitive)
       query = `
         SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
@@ -56,9 +52,8 @@ export class AuthService {
     }
   }
 
-  /**
-   * Check if user exists in SSO system (optional - for future authentication)
-   */
+  // Check if user exists in SSO system (optional for future authentication)
+
   async findSsoUser(username: string): Promise<User | null> {
     try {
       const query = `
@@ -75,17 +70,13 @@ export class AuthService {
       return null;
     } catch (error) {
       console.error("Error finding SSO user:", error);
-      return null; // Don't throw error - SSO is optional for now
+      return null;
     }
   }
 
-  /**
-   * Login student - validates student data and generates JWT token
-   */
   async login(loginData: LoginRequest): Promise<LoginResponse> {
     const { namam_nim, nrm } = loginData;
 
-    // Validate input
     if (!namam_nim || !nrm) {
       throw new Error("Student name/NIM and NRM are required");
     }
@@ -114,9 +105,7 @@ export class AuthService {
     };
   }
 
-  /**
-   * Get student profile by NRM (for authenticated requests)
-   */
+  // Get student profile by NRM (for authenticated requests)
   async getStudentProfile(nrm: string): Promise<Student | null> {
     try {
       const query = `
