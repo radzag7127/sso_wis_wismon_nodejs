@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/usecases/usecase.dart';
 import '../../domain/usecases/check_auth_status_usecase.dart';
@@ -46,6 +47,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     LoginRequestedEvent event,
     Emitter<AuthState> emit,
   ) async {
+    if (kDebugMode) {
+      print('🔑 [AuthBloc] Login requested for: ${event.namamNim}');
+    }
+    
     emit(const AuthLoading());
 
     final result = await loginUseCase(
@@ -53,8 +58,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
 
     result.fold(
-      (failure) => emit(AuthError(message: _mapFailureToMessage(failure))),
-      (user) => emit(AuthAuthenticated(user: user)),
+      (failure) {
+        if (kDebugMode) {
+          print('❌ [AuthBloc] Login failed: ${_mapFailureToMessage(failure)}');
+        }
+        emit(AuthError(message: _mapFailureToMessage(failure)));
+      },
+      (user) {
+        if (kDebugMode) {
+          print('✅ [AuthBloc] Login successful! User: ${user.namam}');
+          print('🚀 [AuthBloc] Emitting AuthAuthenticated state');
+        }
+        emit(AuthAuthenticated(user: user));
+      },
     );
   }
 

@@ -75,6 +75,7 @@ export interface LoginRequest {
   nrm: string;
 }
 
+// Legacy interface - kept for backward compatibility
 export interface LoginResponse {
   token: string;
   user: {
@@ -82,6 +83,55 @@ export interface LoginResponse {
     nim: string;
     namam: string;
   };
+}
+
+// Enhanced login response with dual token system
+export interface EnhancedLoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    nrm: string;
+    nim: string;
+    namam: string;
+  };
+  expiresIn: string; // Access token expiry (e.g., "15m")
+}
+
+// Token refresh request payload
+export interface TokenRefreshRequest {
+  refreshToken?: string; // Optional if using httpOnly cookies
+}
+
+// Token refresh response
+export interface TokenRefreshResponse {
+  accessToken: string;
+  expiresIn: string;
+}
+
+// Enhanced JWT payload with token type
+export interface EnhancedJWTPayload {
+  nrm: string;
+  nim: string;
+  namam: string;
+  type: "access" | "refresh";
+  iat?: number;
+  exp?: number;
+}
+
+// Refresh token specific payload
+export interface RefreshTokenPayload extends EnhancedJWTPayload {
+  tokenId: string; // Unique identifier for token rotation
+  type: "refresh";
+}
+
+// Security event logging interface
+export interface SecurityEvent {
+  type: "login" | "logout" | "token_refresh" | "auth_failure";
+  userId?: string;
+  ip?: string;
+  userAgent?: string;
+  timestamp: Date;
+  details?: Record<string, any>;
 }
 
 export interface PaymentHistoryQuery {
@@ -149,8 +199,8 @@ export interface Transkrip {
 }
 
 /**
- * Interface untuk data JWT payload yang disimpan di dalam token.
- * Digunakan untuk type safety saat mengakses data user dari token.
+ * Legacy JWT payload interface - kept for backward compatibility
+ * @deprecated Use EnhancedJWTPayload instead
  */
 export interface JWTPayload {
   nrm: string;

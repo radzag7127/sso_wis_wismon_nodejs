@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/foundation.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -47,7 +48,14 @@ class _LoginFormState extends State<_LoginForm> {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
+        if (kDebugMode) {
+          print('📱 [LoginPage] BlocListener received state: ${state.runtimeType}');
+        }
+        
         if (state is AuthError) {
+          if (kDebugMode) {
+            print('❌ [LoginPage] Showing error: ${state.message}');
+          }
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
             ..showSnackBar(
@@ -56,6 +64,16 @@ class _LoginFormState extends State<_LoginForm> {
                 backgroundColor: Colors.red,
               ),
             );
+        } else if (state is AuthAuthenticated) {
+          if (kDebugMode) {
+            print('✅ [LoginPage] User authenticated! Navigating to main...');
+            print('👤 [LoginPage] User: ${state.user.namam}');
+          }
+          // Navigate to main app when authentication is successful
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/main',
+            (route) => false, // Remove all previous routes
+          );
         }
       },
       child: Scaffold(

@@ -1,8 +1,20 @@
 import { Request, Response } from "express";
 import { AuthService } from "../services/authService";
 import { ApiResponse, LoginRequest } from "../types";
+import { getSecureCookieOptions, RefreshTokenPayload } from "../utils/auth";
 
 const authService = new AuthService();
+
+// Add request context interface for better type safety
+interface AuthenticatedRequest extends Request {
+  user?: {
+    nrm: string;
+    nim: string;
+    namam: string;
+    tokenType: string;
+  };
+  refreshTokenData?: RefreshTokenPayload;
+}
 
 export class AuthController {
   /**
@@ -40,15 +52,26 @@ export class AuthController {
       const loginResult = await authService.login({ namam_nim, nrm });
 
       console.log("🔐 AUTH LOGIN - Authentication successful:", {
-        hasToken: !!loginResult.token,
+        hasAccessToken: !!loginResult.accessToken,
+        hasRefreshToken: !!loginResult.refreshToken,
         userNrm: loginResult.user?.nrm,
         userNim: loginResult.user?.nim,
       });
 
+      // Set refresh token as httpOnly cookie for enhanced security
+      const cookieOptions = getSecureCookieOptions();
+      res.cookie('refreshToken', loginResult.refreshToken, cookieOptions);
+      
+      // Return access token in response body (client will store this)
       res.status(200).json({
         success: true,
         message: "Login successful",
-        data: loginResult,
+        data: {
+          accessToken: loginResult.accessToken,
+          user: loginResult.user,
+          // Don't include refresh token in response body for security
+          expiresIn: "15m" // Access token expiry
+        },
       } as ApiResponse);
     } catch (error) {
       console.error("🔐 AUTH LOGIN - Error:", error);
@@ -120,7 +143,7 @@ export class AuthController {
 
   /**
    * POST /auth/verify
-   * Verify JWT token
+   * Verify JWT access token
    */
   async verifyToken(req: Request, res: Response): Promise<void> {
     try {
@@ -128,18 +151,100 @@ export class AuthController {
 
       res.status(200).json({
         success: true,
-        message: "Token is valid",
+        message: "Access token is valid",
         data: {
           nrm: user.nrm,
           nim: user.nim,
           namam: user.namam,
+          tokenType: user.tokenType,
         },
       } as ApiResponse);
     } catch (error) {
       res.status(401).json({
         success: false,
-        message: "Invalid token",
-        errors: ["Token verification failed"],
+        message: "Invalid or expired access token",
+        errors: ["Access token verification failed"],
+      } as ApiResponse);
+    }
+  }
+
+  /**
+   * POST /auth/refresh
+   * Refresh access token using refresh token
+   */
+  async refreshToken(req: Request, res: Response): Promise<void> {
+    try {
+      const refreshTokenData = (req as any).refreshTokenData as RefreshTokenPayload;
+      
+      console.log("🔄 TOKEN REFRESH - Request received:", {
+        userNrm: refreshTokenData.nrm,
+        tokenId: refreshTokenData.tokenId,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Generate new token pair using the existing user data
+      const newTokens = await authService.refreshTokens({
+        nrm: refreshTokenData.nrm,
+        nim: refreshTokenData.nim,
+        namam: refreshTokenData.namam,
+      });
+
+      console.log("🔄 TOKEN REFRESH - New tokens generated successfully");
+
+      // Set new refresh token as httpOnly cookie
+      const cookieOptions = getSecureCookieOptions();
+      res.cookie('refreshToken', newTokens.refreshToken, cookieOptions);
+      
+      // Return new access token
+      res.status(200).json({
+        success: true,
+        message: "Tokens refreshed successfully",
+        data: {
+          accessToken: newTokens.accessToken,
+          expiresIn: "15m"
+        },
+      } as ApiResponse);
+      
+    } catch (error) {
+      console.error("🔄 TOKEN REFRESH - Error:", error);
+      
+      // Clear refresh token cookie on error
+      res.clearCookie('refreshToken');
+      
+      const errorMessage = error instanceof Error ? error.message : "Token refresh failed";
+      
+      res.status(401).json({
+        success: false,
+        message: errorMessage,
+        errors: ["Please login again"],
+      } as ApiResponse);
+    }
+  }
+
+  /**
+   * POST /auth/logout
+   * Logout user by clearing refresh token
+   */
+  async logout(req: Request, res: Response): Promise<void> {
+    try {
+      // Clear the refresh token cookie
+      res.clearCookie('refreshToken');
+      
+      console.log("🚪 LOGOUT - User logged out successfully");
+      
+      res.status(200).json({
+        success: true,
+        message: "Logged out successfully",
+        data: null,
+      } as ApiResponse);
+      
+    } catch (error) {
+      console.error("🚪 LOGOUT - Error:", error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Logout failed",
+        errors: [error instanceof Error ? error.message : "Unknown error"],
       } as ApiResponse);
     }
   }

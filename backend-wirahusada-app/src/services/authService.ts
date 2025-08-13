@@ -1,14 +1,28 @@
 import { executeSsoQuery, executeWisQuery } from "../config/database";
-import { User, Student, LoginRequest, LoginResponse } from "../types";
-import { generateToken } from "../utils/auth";
+import { User, Student, LoginRequest } from "../types";
+import { generateTokenPair, TokenPair } from "../utils/auth";
+
+// Enhanced response interface for dual token system
+export interface EnhancedLoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    nrm: string;
+    nim: string;
+    namam: string;
+  };
+}
+
+export interface TokenRefreshPayload {
+  nrm: string;
+  nim: string;
+  namam: string;
+}
 
 export class AuthService {
-  /**
-   * Find student by name or NIM and NRM
-   */
+  // #1 Temporary login function, will be replaced with SSO login for the next stage development
   async findStudent(namam_nim: string, nrm: string): Promise<Student | null> {
     try {
-      // Try to find student by NIM first
       let query = `
         SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
         FROM mahasiswa 
@@ -19,7 +33,6 @@ export class AuthService {
       if (results.length > 0) {
         return results[0] as Student;
       }
-
       // If not found by NIM, try by student name (exact match, case-insensitive)
       query = `
         SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
@@ -57,7 +70,21 @@ export class AuthService {
   }
 
   /**
-   * Check if user exists in SSO system (optional - for future authentication)
+   * Validate student credentials (future enhancement for stronger authentication)
+   * Currently validates existence, but could be extended for password-based auth
+   */
+  async validateStudentCredentials(namam_nim: string, nrm: string): Promise<boolean> {
+    try {
+      const student = await this.findStudent(namam_nim, nrm);
+      return student !== null;
+    } catch (error) {
+      console.error("Error validating student credentials:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if user exists in SSO system (optional for future authentication)
    */
   async findSsoUser(username: string): Promise<User | null> {
     try {
@@ -75,17 +102,13 @@ export class AuthService {
       return null;
     } catch (error) {
       console.error("Error finding SSO user:", error);
-      return null; // Don't throw error - SSO is optional for now
+      return null;
     }
   }
 
-  /**
-   * Login student - validates student data and generates JWT token
-   */
-  async login(loginData: LoginRequest): Promise<LoginResponse> {
+  async login(loginData: LoginRequest): Promise<EnhancedLoginResponse> {
     const { namam_nim, nrm } = loginData;
 
-    // Validate input
     if (!namam_nim || !nrm) {
       throw new Error("Student name/NIM and NRM are required");
     }
@@ -97,21 +120,50 @@ export class AuthService {
       throw new Error("Student not found or invalid credentials");
     }
 
-    // Generate JWT token
-    const token = generateToken({
+    // Generate token pair (access + refresh)
+    const tokens = generateTokenPair({
       nrm: student.nrm,
       nim: student.nim,
       namam: student.namam,
     });
 
+    console.log(`🔐 Generated new token pair for user: ${student.nrm}`);
+
     return {
-      token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: {
         nrm: student.nrm,
         nim: student.nim,
         namam: student.namam,
       },
     };
+  }
+
+  /**
+   * Refresh tokens for authenticated user
+   * Generates new access and refresh token pair
+   */
+  async refreshTokens(payload: TokenRefreshPayload): Promise<TokenPair> {
+    const { nrm, nim, namam } = payload;
+
+    // Verify user still exists in database before issuing new tokens
+    const student = await this.getStudentProfile(nrm);
+    
+    if (!student) {
+      throw new Error("User not found - account may have been deactivated");
+    }
+
+    // Generate new token pair
+    const tokens = generateTokenPair({
+      nrm: student.nrm,
+      nim: student.nim,
+      namam: student.namam,
+    });
+
+    console.log(`🔄 Refreshed tokens for user: ${student.nrm}`);
+
+    return tokens;
   }
 
   /**

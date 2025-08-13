@@ -178,13 +178,27 @@ class ApiService {
   ) async {
     try {
       final token = await getAuthToken();
+      final url = Uri.parse('$baseUrl$endpoint');
+      final headers = _getHeaders(token);
+      final body = jsonEncode(data);
+
+      if (kDebugMode) {
+        print('--- 📤 [API POST Request] 📤 ---');
+        print('URL: $url');
+        print('Headers: $headers');
+        print('Body: $body');
+      }
+
       final response = await _client!
-          .post(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(token),
-            body: jsonEncode(data),
-          )
+          .post(url, headers: headers, body: body)
           .timeout(const Duration(seconds: 30));
+
+      if (kDebugMode) {
+        print('--- 📥 [API POST Response] 📥 ---');
+        print('Status Code: ${response.statusCode}');
+        print('Body: ${response.body}');
+        print('--------------------------');
+      }
 
       return _handleResponse(response);
     } on SocketException {
@@ -194,22 +208,53 @@ class ApiService {
     } on FormatException {
       throw Exception('Respons server tidak valid');
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ [API POST Error]: $e');
+      }
       throw Exception('Terjadi kesalahan: ${e.toString()}');
     }
   }
 
   // AUTH METHODS
   Future<UserModel> login(String namamNim, String nrm) async {
-    final data = await post('/api/auth/login', {
-      'namam_nim': namamNim,
-      'nrm': nrm,
-    });
+    try {
+      final data = await post('/api/auth/login', {
+        'namam_nim': namamNim,
+        'nrm': nrm,
+      });
 
-    if (data['success']) {
-      await setAuthToken(data['data']['token']);
-      return UserModel.fromJson(data['data']['user']);
-    } else {
-      throw Exception(data['message'] ?? 'Login failed');
+      if (kDebugMode) {
+        print('--- 🔐 [LOGIN RESPONSE] 🔐 ---');
+        print('Success: ${data['success']}');
+        print('Data keys: ${data['data']?.keys.toList()}');
+        print('AccessToken present: ${data['data']?['accessToken'] != null}');
+        print('User data: ${data['data']?['user']}');
+        print('-------------------------');
+      }
+
+      if (data['success']) {
+        final accessToken = data['data']['accessToken'];
+        if (accessToken != null) {
+          await setAuthToken(accessToken);
+          if (kDebugMode) {
+            print('✅ Token saved successfully');
+          }
+        } else {
+          if (kDebugMode) {
+            print('❌ No accessToken found in response');
+          }
+          throw Exception('No access token received from server');
+        }
+        
+        return UserModel.fromJson(data['data']['user']);
+      } else {
+        throw Exception(data['message'] ?? 'Login failed');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Login error: $e');
+      }
+      rethrow;
     }
   }
 
