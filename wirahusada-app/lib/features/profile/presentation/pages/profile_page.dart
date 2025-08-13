@@ -6,11 +6,21 @@ import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_event.dart'
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Keep page alive when switching tabs
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(

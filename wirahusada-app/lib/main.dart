@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +10,9 @@ import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_navigation_page.dart';
 import 'features/payment/presentation/bloc/payment_bloc.dart';
+import 'features/payment/presentation/bloc/payment_event.dart';
+import 'features/dashboard/presentation/bloc/beranda_bloc.dart';
+import 'features/dashboard/presentation/bloc/beranda_event.dart';
 import 'core/services/api_service.dart';
 
 // Cache the text theme to prevent repeated font loading
@@ -41,26 +45,66 @@ Future<void> _initializeTheme() async {
   const String fontName = 'Plus Jakarta Sans';
 
   // Create a custom TextTheme using the local font
-  _cachedTextTheme = const TextTheme(
-    displayLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w800),
-    displayMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
-    displaySmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
-    headlineLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w800),
-    headlineMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
-    headlineSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
-    titleLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w700),
-    titleMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
-    titleSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w500),
-    bodyLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
-    bodyMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
-    bodySmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
-    labelLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w600),
-    labelMedium: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w500),
-    labelSmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
-  ).apply(
-    bodyColor: const Color(0xFF121212),
-    displayColor: const Color(0xFF121212),
-  );
+  _cachedTextTheme =
+      const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w800,
+        ),
+        displayMedium: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w700,
+        ),
+        displaySmall: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w600,
+        ),
+        headlineLarge: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w800,
+        ),
+        headlineMedium: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w700,
+        ),
+        headlineSmall: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w600,
+        ),
+        titleLarge: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w700,
+        ),
+        titleMedium: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w600,
+        ),
+        titleSmall: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w500,
+        ),
+        bodyLarge: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+        bodyMedium: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w400,
+        ),
+        bodySmall: TextStyle(fontFamily: fontName, fontWeight: FontWeight.w400),
+        labelLarge: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w600,
+        ),
+        labelMedium: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w500,
+        ),
+        labelSmall: TextStyle(
+          fontFamily: fontName,
+          fontWeight: FontWeight.w400,
+        ),
+      ).apply(
+        bodyColor: const Color(0xFF121212),
+        displayColor: const Color(0xFF121212),
+      );
 
   _cachedThemeData = ThemeData(
     primarySwatch: Colors.blue,
@@ -98,15 +142,37 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Timer? _memoryCleanupTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _preloadCriticalData();
+  }
+
+  void _preloadCriticalData() {
+    // Preload data that all pages need after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // Preload payment summary for dashboard
+        final paymentBloc = di.sl<PaymentBloc>();
+        paymentBloc.add(const LoadPaymentSummaryEvent());
+
+        // Preload beranda data
+        final berandaBloc = di.sl<BerandaBloc>();
+        berandaBloc.add(const FetchBerandaDataEvent());
+      } catch (e) {
+        // Handle any initialization errors gracefully
+        debugPrint('Error preloading data: $e');
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _memoryCleanupTimer?.cancel();
     // Clean up API service connections
     ApiService.dispose();
     super.dispose();
@@ -115,17 +181,52 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Optimize memory when app goes to background
-    if (state == AppLifecycleState.paused) {
-      // Force garbage collection when app is paused
-      _performMemoryCleanup();
+
+    switch (state) {
+      case AppLifecycleState.paused:
+        // Schedule cleanup instead of immediate clearing
+        _scheduleMemoryCleanup();
+        break;
+      case AppLifecycleState.resumed:
+        // Cancel cleanup if user returns quickly
+        _cancelMemoryCleanup();
+        break;
+      case AppLifecycleState.detached:
+        // App is being terminated, do selective cleanup
+        _performSelectiveCleanup();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        // No action needed for these states
+        break;
     }
   }
 
-  void _performMemoryCleanup() {
-    // Clear unnecessary cached images
-    imageCache.clear();
-    imageCache.clearLiveImages();
+  void _scheduleMemoryCleanup() {
+    _memoryCleanupTimer?.cancel();
+    // Only clean after extended background time (5 minutes)
+    _memoryCleanupTimer = Timer(const Duration(minutes: 5), () {
+      _performSelectiveCleanup();
+    });
+  }
+
+  void _cancelMemoryCleanup() {
+    _memoryCleanupTimer?.cancel();
+  }
+
+  void _performSelectiveCleanup() {
+    // Only clear if memory pressure is high
+    final imageCache = PaintingBinding.instance.imageCache;
+    const int maxCacheSize = 50 * 1024 * 1024; // 50MB threshold
+
+    if (imageCache.currentSizeBytes > maxCacheSize) {
+      // Clear live images but keep cached ones for faster reload
+      imageCache.clearLiveImages();
+      // Only clear cache if still over threshold
+      if (imageCache.currentSizeBytes > maxCacheSize) {
+        imageCache.clear();
+      }
+    }
   }
 
   @override
@@ -138,7 +239,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         BlocProvider(
           create: (_) => di.sl<PaymentBloc>(),
-          lazy: true, // Lazy load for better startup performance
+          lazy: false, // Keep non-lazy for shared usage across pages
         ),
       ],
       child: MaterialApp(

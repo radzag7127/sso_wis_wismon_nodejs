@@ -273,15 +273,26 @@ class _KrsViewState extends State<KrsView> {
   }
 
   Widget _buildKrsContent(BuildContext context, Krs krs) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 80.0),
-      child: Column(
-        children: [
-          _KrsHeaderCard(krs: krs),
-          const SizedBox(height: 24),
-          _MataKuliahList(courses: krs.mataKuliah),
-        ],
-      ),
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 24),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _KrsHeaderCard(krs: krs),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+        _MataKuliahSliverList(courses: krs.mataKuliah),
+        const SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: 80.0,
+          ), // Bottom padding for navigation
+        ),
+      ],
     );
   }
 }
@@ -544,37 +555,45 @@ class _KrsHeaderCard extends StatelessWidget {
   }
 }
 
-class _MataKuliahList extends StatelessWidget {
+class _MataKuliahSliverList extends StatelessWidget {
   final List<KrsCourse> courses;
-  const _MataKuliahList({required this.courses});
+  const _MataKuliahSliverList({required this.courses});
 
   @override
   Widget build(BuildContext context) {
     if (courses.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 48.0),
-          child: Text("Tidak ada mata kuliah yang diambil."),
+      return const SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 48.0),
+        sliver: SliverToBoxAdapter(
+          child: Center(child: Text("Tidak ada mata kuliah yang diambil.")),
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Daftar Mata Kuliah",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: courses.length,
-          itemBuilder: (context, index) {
-            return _MataKuliahTile(course: courses[index]);
-          },
-        ),
-      ],
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index == 0) {
+            // Add header before first item
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Daftar Mata Kuliah",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _MataKuliahTile(course: courses[0]),
+              ],
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _MataKuliahTile(course: courses[index]),
+          );
+        }, childCount: courses.length),
+      ),
     );
   }
 }

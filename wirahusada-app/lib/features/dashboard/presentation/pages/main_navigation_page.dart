@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart';
 import 'package:wismon_keuangan/features/dashboard/presentation/pages/beranda_page.dart';
@@ -18,7 +17,8 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   late PageController _pageController;
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = [
+  // Pre-create pages to avoid recreation and enable caching
+  late final List<Widget> _pages = [
     const BerandaPage(),
     const MenuPage(),
     const ProfilePage(),
@@ -27,7 +27,10 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _selectedIndex);
+    _pageController = PageController(
+      initialPage: _selectedIndex,
+      keepPage: true, // Keep pages in memory
+    );
   }
 
   @override
@@ -69,6 +72,8 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
                 });
               },
               children: _pages,
+              // Add smoother physics for better transitions
+              physics: const ClampingScrollPhysics(),
             ),
             bottomNavigationBar: _buildBottomNavigationBar(),
           );

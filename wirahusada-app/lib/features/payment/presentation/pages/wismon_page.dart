@@ -31,12 +31,38 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
   List<Map<String, String>> _paymentTypesForDropdown = [];
   String _selectedPaymentTypeCode = 'all';
 
+  // Cache preferences to avoid disk I/O on rebuilds
+  List<String>? _cachedSelectedTypes;
+  bool _preferencesLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _preferencesService = di.sl<DashboardPreferencesService>();
     _apiService = di.sl<ApiService>();
+    _loadPreferences();
     _loadPaymentData();
+  }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final types = await _preferencesService.getSelectedPaymentTypes();
+      if (mounted) {
+        setState(() {
+          _cachedSelectedTypes = types;
+          _preferencesLoaded = true;
+        });
+      }
+    } catch (e) {
+      // Handle error gracefully, use defaults
+      if (mounted) {
+        setState(() {
+          _cachedSelectedTypes =
+              DashboardPreferencesService.defaultPaymentTypes;
+          _preferencesLoaded = true;
+        });
+      }
+    }
   }
 
   @override
@@ -426,68 +452,62 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
       MaterialPageRoute(builder: (_) => const DashboardCustomizationPage()),
     );
 
-    // If user made changes, refresh the summary to update UI
+    // If user made changes, refresh preferences cache and UI
     if (result == true && mounted) {
-      setState(() {
-        // This will trigger a rebuild with new preferences
-      });
+      await _loadPreferences(); // Refresh cached preferences
     }
   }
 
   Widget _buildPaymentSummary(BuildContext context, PaymentSummary summary) {
-    return FutureBuilder<List<String>>(
-      future: _preferencesService.getSelectedPaymentTypes(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SizedBox(
-            height: 80,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
+    // Use cached preferences instead of FutureBuilder
+    if (!_preferencesLoaded || _cachedSelectedTypes == null) {
+      return const SizedBox(
+        height: 80,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-        final selectedTypes = snapshot.data!;
-        if (selectedTypes.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    final selectedTypes = _cachedSelectedTypes!;
+    if (selectedTypes.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-        // Create filtered breakdown based on user preferences
-        final List<MapEntry<String, double>> filteredBreakdown = [];
+    // Create filtered breakdown based on user preferences
+    final List<MapEntry<String, double>> filteredBreakdown = [];
 
-        for (final selectedType in selectedTypes) {
-          final amount = summary.breakdown[selectedType] ?? 0.0;
-          filteredBreakdown.add(MapEntry(selectedType, amount));
-        }
+    for (final selectedType in selectedTypes) {
+      final amount = summary.breakdown[selectedType] ?? 0.0;
+      filteredBreakdown.add(MapEntry(selectedType, amount));
+    }
 
-        if (filteredBreakdown.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    if (filteredBreakdown.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-        final List<Widget> cardRows = [];
-        for (int i = 0; i < filteredBreakdown.length; i += 2) {
-          final item1 = filteredBreakdown[i];
-          final card1 = Expanded(
-            child: PaymentSummaryCard(title: item1.key, amount: item1.value),
-          );
+    final List<Widget> cardRows = [];
+    for (int i = 0; i < filteredBreakdown.length; i += 2) {
+      final item1 = filteredBreakdown[i];
+      final card1 = Expanded(
+        child: PaymentSummaryCard(title: item1.key, amount: item1.value),
+      );
 
-          final rowChildren = <Widget>[card1];
+      final rowChildren = <Widget>[card1];
 
-          if (i + 1 < filteredBreakdown.length) {
-            final item2 = filteredBreakdown[i + 1];
-            final card2 = Expanded(
-              child: PaymentSummaryCard(title: item2.key, amount: item2.value),
-            );
-            rowChildren.addAll([const SizedBox(width: 12), card2]);
-          }
+      if (i + 1 < filteredBreakdown.length) {
+        final item2 = filteredBreakdown[i + 1];
+        final card2 = Expanded(
+          child: PaymentSummaryCard(title: item2.key, amount: item2.value),
+        );
+        rowChildren.addAll([const SizedBox(width: 12), card2]);
+      }
 
-          cardRows.add(Row(children: rowChildren));
-          if (i + 2 < filteredBreakdown.length) {
-            cardRows.add(const SizedBox(height: 12));
-          }
-        }
+      cardRows.add(Row(children: rowChildren));
+      if (i + 2 < filteredBreakdown.length) {
+        cardRows.add(const SizedBox(height: 12));
+      }
+    }
 
-        return Column(mainAxisSize: MainAxisSize.min, children: cardRows);
-      },
-    );
+    return Column(mainAxisSize: MainAxisSize.min, children: cardRows);
   }
 
   Widget _buildTransactionCard(BuildContext context, PaymentHistoryItem item) {

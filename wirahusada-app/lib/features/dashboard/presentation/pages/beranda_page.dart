@@ -24,10 +24,14 @@ class BerandaPage extends StatefulWidget {
   State<BerandaPage> createState() => _BerandaPageState();
 }
 
-class _BerandaPageState extends State<BerandaPage> with WidgetsBindingObserver {
+class _BerandaPageState extends State<BerandaPage>
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   final PageController _carouselController = PageController();
   int _currentCarouselIndex = 0;
   Timer? _carouselTimer;
+
+  @override
+  bool get wantKeepAlive => true; // Keep page alive when switching tabs
 
   @override
   void initState() {
@@ -129,6 +133,7 @@ class _BerandaPageState extends State<BerandaPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return BlocProvider(
       create: (context) {
         final bloc = di.sl<BerandaBloc>();
@@ -596,54 +601,56 @@ class _BerandaPageState extends State<BerandaPage> with WidgetsBindingObserver {
             },
           ),
           const SizedBox(height: 16),
-          // Use PaymentBloc for the actual payment data (same as wismon_page.dart)
-          BlocProvider(
-            create: (context) {
-              final bloc = di.sl<PaymentBloc>();
-              // Use refresh event to ensure fresh data load
-              bloc.add(const RefreshPaymentDataEvent());
-              return bloc;
+          // Reuse existing PaymentBloc from main.dart instead of creating new one
+          BlocBuilder<PaymentBloc, PaymentState>(
+            buildWhen: (previous, current) =>
+                current is PaymentSummaryLoaded ||
+                current is PaymentError ||
+                current is PaymentLoading,
+            builder: (context, state) {
+              // Trigger load only if needed and not already loading
+              if (state is PaymentInitial) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  context.read<PaymentBloc>().add(
+                    const LoadPaymentSummaryEvent(),
+                  );
+                });
+              }
+
+              if (state is PaymentLoading) {
+                return const Center(
+                  child: SizedBox(
+                    height: 60,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF135EA2),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              if (state is PaymentSummaryLoaded) {
+                return _buildPaymentSummaryCards(state.summary);
+              }
+
+              if (state is PaymentError) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    'Error loading payment data: ${state.message}',
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  ),
+                );
+              }
+
+              return const SizedBox.shrink();
             },
-            child: BlocBuilder<PaymentBloc, PaymentState>(
-              builder: (context, state) {
-                if (state is PaymentLoading) {
-                  return const Center(
-                    child: SizedBox(
-                      height: 60,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF135EA2),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                if (state is PaymentSummaryLoaded) {
-                  return _buildPaymentSummaryCards(state.summary);
-                }
-
-                if (state is PaymentError) {
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Text(
-                      'Error loading payment data: ${state.message}',
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  );
-                }
-
-                return const SizedBox.shrink();
-              },
-            ),
           ),
         ],
       ),

@@ -19,10 +19,15 @@ class ApiService {
   // For Chrome/Web development: http://localhost:3000
   // For Android emulator: http://10.0.2.2:3000
   // For iOS simulator: http://localhost:3000
-  static const String baseUrl = 'http://localhost:3000';
+  static const String baseUrl = 'http://10.0.2.2:3000';
   static http.Client? _client;
   static final Map<String, dynamic> _cache = {};
   static const int _cacheTimeout = 5 * 60 * 1000; // 5 minutes
+
+  // Smart logging configuration
+  static const bool _enableVerboseLogging =
+      false; // Feature flag for verbose logs
+  static const int _maxLogBodyLength = 500; // Truncate large responses
 
   // Regular constructor for DI, but still use singleton pattern for client
   ApiService() {
@@ -53,6 +58,32 @@ class ApiService {
       return _cache[key]['data'];
     }
     return null;
+  }
+
+  // Smart response logging method
+  void _logResponse(http.Response response) {
+    if (!kDebugMode) return;
+
+    if (_enableVerboseLogging) {
+      // Verbose logging for debugging
+      final body = response.body;
+      print('--- 📬 [API Response] ${response.statusCode} ---');
+      if (body.length > _maxLogBodyLength) {
+        print(
+          'Body: ${body.substring(0, _maxLogBodyLength)}... (${body.length} chars total)',
+        );
+      } else {
+        print('Body: $body');
+      }
+      print('---');
+    } else {
+      // Minimal logging by default - only log errors and important status
+      if (response.statusCode >= 400) {
+        print('❌ API ${response.statusCode}: ${response.request?.url.path}');
+      } else if (response.statusCode == 200 || response.statusCode == 201) {
+        print('✅ API ${response.statusCode}: ${response.request?.url.path}');
+      }
+    }
   }
 
   Future<String?> getAuthToken() async {
@@ -115,32 +146,18 @@ class ApiService {
       final url = Uri.parse('$baseUrl$endpoint');
       final headers = _getHeaders(token);
 
-      // =================================================================
-      // KOMENTAR: Penambahan logging untuk melihat detail request.
-      // Ini akan mencetak URL, headers, dan token yang dikirim ke console.
-      // =================================================================
-      if (kDebugMode) {
-        print('--- 🚀 [API GET Request] 🚀 ---');
-        print('URL: $url');
+      // Smart logging - minimal by default, verbose only when needed
+      if (kDebugMode && _enableVerboseLogging) {
+        print('--- 🚀 [API Request] ${url.path} ---');
         print('Headers: $headers');
       }
-      // =================================================================
 
       final response = await _client!
           .get(url, headers: headers)
           .timeout(const Duration(seconds: 30));
 
-      // =================================================================
-      // KOMENTAR: Penambahan logging untuk melihat response mentah dari server.
-      // Ini akan mencetak status code (misal: 200, 404, 500) dan body JSON.
-      // =================================================================
-      if (kDebugMode) {
-        print('--- 📬 [API GET Response] 📬 ---');
-        print('Status Code: ${response.statusCode}');
-        print('Body: ${response.body}');
-        print('--------------------------');
-      }
-      // =================================================================
+      // Smart response logging
+      _logResponse(response);
 
       final data = _handleResponse(response);
 
@@ -157,14 +174,10 @@ class ApiService {
     } on FormatException {
       throw Exception('Respons server tidak valid');
     } catch (e) {
-      // =================================================================
-      // KOMENTAR: Logging tambahan untuk menangkap error yang mungkin terjadi.
-      // =================================================================
+      // Minimal error logging
       if (kDebugMode) {
-        print('--- ❌ [API GET Error]: General Catch ---');
-        print(e.toString());
+        print('❌ API Error: $endpoint - ${e.toString()}');
       }
-      // =================================================================
       throw Exception(
         'Terjadi kesalahan: ${e.toString().replaceAll("Exception: ", "")}',
       );
@@ -245,7 +258,7 @@ class ApiService {
           }
           throw Exception('No access token received from server');
         }
-        
+
         return UserModel.fromJson(data['data']['user']);
       } else {
         throw Exception(data['message'] ?? 'Login failed');

@@ -272,25 +272,29 @@ class _TranskripPageState extends State<TranskripPage> {
     return Column(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSummaryCards(
-                  transkrip,
-                  _originalCourses,
-                ), // Summary tetap dari data original
-                const SizedBox(height: 20),
-                const Divider(color: Color(0xFFE7E7E7), height: 1),
-                const SizedBox(height: 20),
-                _buildFilterChips(),
-                const SizedBox(height: 16),
-                _buildCourseList(
-                  _sortedCourses,
-                ), // Tampilkan data yang sudah diurutkan
-              ],
-            ),
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSummaryCards(
+                        transkrip,
+                        _originalCourses,
+                      ), // Summary tetap dari data original
+                      const SizedBox(height: 20),
+                      const Divider(color: Color(0xFFE7E7E7), height: 1),
+                      const SizedBox(height: 20),
+                      _buildFilterChips(),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+              _buildCourseSliverList(_sortedCourses), // Virtualized list
+            ],
           ),
         ),
         _buildDownloadButton(context),
@@ -445,41 +449,53 @@ class _TranskripPageState extends State<TranskripPage> {
     );
   }
 
-  Widget _buildCourseList(List<Course> courses) {
+  Widget _buildCourseSliverList(List<Course> courses) {
     if (courses.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'Tidak ada data mata kuliah',
-            style: TextStyle(fontSize: 14, color: Color(0xFF545556)),
-            textAlign: TextAlign.center,
+      return const SliverPadding(
+        padding: EdgeInsets.all(32),
+        sliver: SliverToBoxAdapter(
+          child: Center(
+            child: Text(
+              'Tidak ada data mata kuliah',
+              style: TextStyle(fontSize: 14, color: Color(0xFF545556)),
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTableHeader(),
-        const SizedBox(height: 12),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: courses.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 4),
-          itemBuilder: (context, index) {
-            final course = courses[index];
-            return _CourseTile(
-              course: course,
-              // --- PERUBAHAN: Kirim data & fungsi yang diperlukan ke tile ---
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          if (index == 0) {
+            // Add header before first item
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTableHeader(),
+                const SizedBox(height: 12),
+                _CourseTile(
+                  course: courses[0],
+                  repeatedCourseCodes: _repeatedCourseCodes,
+                  onProposeDeletion: (course) =>
+                      _showProposeDeletionDialog(context, course),
+                ),
+              ],
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _CourseTile(
+              course: courses[index],
               repeatedCourseCodes: _repeatedCourseCodes,
               onProposeDeletion: (course) =>
                   _showProposeDeletionDialog(context, course),
-            );
-          },
-        ),
-      ],
+            ),
+          );
+        }, childCount: courses.length),
+      ),
     );
   }
 

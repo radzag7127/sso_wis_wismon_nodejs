@@ -12,11 +12,21 @@ import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_
 //IMPORT UNTUK KHS
 import 'package:wismon_keuangan/features/khs/presentation/pages/khs_page.dart';
 
-class MenuPage extends StatelessWidget {
+class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
 
   @override
+  State<MenuPage> createState() => _MenuPageState();
+}
+
+class _MenuPageState extends State<MenuPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Keep page alive when switching tabs
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(

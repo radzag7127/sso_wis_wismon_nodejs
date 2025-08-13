@@ -273,20 +273,26 @@ class _KhsViewState extends State<KhsView> {
   }
 
   Widget _buildKhsContent(BuildContext context, Khs khs) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        16.0,
-        0,
-        16.0,
-        80.0,
-      ), // Removed top padding
-      child: Column(
-        children: [
-          _RekapitulasiCard(rekap: khs.rekapitulasi),
-          const SizedBox(height: 24),
-          _MataKuliahList(courses: khs.mataKuliah),
-        ],
-      ),
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 24),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _RekapitulasiCard(rekap: khs.rekapitulasi),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+        _MataKuliahSliverList(courses: khs.mataKuliah),
+        const SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: 80.0,
+          ), // Bottom padding for navigation
+        ),
+      ],
     );
   }
 }
@@ -585,26 +591,33 @@ class _RekapItem extends StatelessWidget {
   }
 }
 
-class _MataKuliahList extends StatelessWidget {
+class _MataKuliahSliverList extends StatelessWidget {
   final List<KhsCourse> courses;
-  const _MataKuliahList({required this.courses});
+  const _MataKuliahSliverList({required this.courses});
+
   @override
   Widget build(BuildContext context) {
     if (courses.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 48.0),
-          child: Text("Tidak ada data mata kuliah untuk semester ini."),
+      return const SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 48.0),
+        sliver: SliverToBoxAdapter(
+          child: Center(
+            child: Text("Tidak ada data mata kuliah untuk semester ini."),
+          ),
         ),
       );
     }
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: courses.length,
-      itemBuilder: (context, index) {
-        return _MataKuliahTile(course: courses[index]);
-      },
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate((context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _MataKuliahTile(course: courses[index]),
+          );
+        }, childCount: courses.length),
+      ),
     );
   }
 }
