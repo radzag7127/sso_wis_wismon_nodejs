@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { PaymentController } from "../controllers/paymentController";
 import { authenticateToken } from "../utils/auth";
+import { validatePayment, validateGeneral } from "../middleware/validation";
 
 const router = Router();
 const paymentController = new PaymentController();
@@ -8,21 +9,24 @@ const paymentController = new PaymentController();
 // All payment routes require authentication
 router.use(authenticateToken);
 
-// Payment history with filtering and pagination
+// Payment history with filtering and pagination validation
 router.get(
   "/history",
+  ...validatePayment.dateRange,
   paymentController.getPaymentHistory.bind(paymentController)
 );
 
-// Payment summary/recapitulation
+// Payment summary/recapitulation with date range validation
 router.get(
   "/summary",
+  ...validatePayment.dateRange,
   paymentController.getPaymentSummary.bind(paymentController)
 );
 
-// Transaction detail
+// Transaction detail with ID validation
 router.get(
   "/detail/:id",
+  ...validatePayment.paymentId,
   paymentController.getTransactionDetail.bind(paymentController)
 );
 

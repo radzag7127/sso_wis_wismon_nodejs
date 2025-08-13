@@ -1,12 +1,13 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { testConnections } from "./config/database";
+import { testConnections, closeDatabaseConnections, getDatabaseHealth } from "./config/database";
 import { databaseMigration } from "./utils/migrations";
 import authRoutes from "./routes/authRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import akademikRoutes from "./routes/akademikRoutes";
 import berandaRoutes from "./routes/berandaRoutes";
+import healthRoutes from "./routes/healthRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -65,15 +66,12 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/akademik", akademikRoutes);
 // beranda routes
 app.use("/api/beranda", berandaRoutes);
+// health check routes
+app.use("/health", healthRoutes);
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
-  });
+// Legacy health check endpoint (redirect to new routes)
+app.get("/health-legacy", (req, res) => {
+  res.redirect(301, '/health');
 });
 
 // Basic route
@@ -88,6 +86,8 @@ app.get("/", (req, res) => {
         login: "POST /api/auth/login",
         profile: "GET /api/auth/profile",
         verify: "POST /api/auth/verify",
+        refresh: "POST /api/auth/refresh",
+        logout: "POST /api/auth/logout",
       },
       payments: {
         history: "GET /api/payments/history",
@@ -136,15 +136,25 @@ async function startServer() {
     console.log("🚀 Starting Wismon Keuangan Backend Server...");
     console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
 
-    // Test database connections
+    // Test database connections with comprehensive retry logic
     console.log("🔍 Testing database connections...");
     const dbResults = await testConnections();
+
+    // Validate that critical databases are connected
+    const criticalDatabases = ['sso', 'wismon']; // SSO for auth, WISMON for payments
+    const criticalFailures = criticalDatabases.filter(db => !dbResults[db as keyof typeof dbResults].success);
+    
+    if (criticalFailures.length > 0) {
+      console.error(`💥 CRITICAL: Cannot start server - essential databases failed: ${criticalFailures.join(', ')}`);
+      console.error('These databases are required for core functionality.');
+      process.exit(1);
+    }
 
     // Run database migrations
     console.log("🔧 Running database migrations...");
     await databaseMigration.initialize();
 
-    const successCount = Object.values(dbResults).filter(Boolean).length;
+    const successCount = Object.values(dbResults).filter(r => r.success).length;
     const totalCount = Object.keys(dbResults).length;
 
     if (successCount === totalCount) {
@@ -153,15 +163,17 @@ async function startServer() {
       console.log(
         `⚠️  ${successCount}/${totalCount} database connections successful`
       );
-      console.log("Database connection results:", dbResults);
+      console.log("Non-critical databases may have limited functionality.");
     }
 
     // Start the server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log("🎉 Server started successfully!");
       console.log(`📡 API endpoint: http://localhost:${PORT}`);
       console.log(`📋 API documentation: http://localhost:${PORT}`);
       console.log(`🔧 Health check: http://localhost:${PORT}/health`);
+      console.log(`🗄️  Database health: http://localhost:${PORT}/health/database`);
+      console.log(`📊 Detailed health: http://localhost:${PORT}/health/detailed`);
       console.log("");
       console.log("Available Endpoints:");
       console.log("  Authentication:");
@@ -178,29 +190,99 @@ async function startServer() {
       console.log(
         "    GET  /api/payments/types       - Available payment types"
       );
+      console.log("  Health Monitoring:");
+      console.log("    GET  /health                   - Basic health check");
+      console.log("    GET  /health/database          - Database health status");
+      console.log("    GET  /health/database/config   - Database configuration info");
+      console.log("    GET  /health/detailed          - Comprehensive system health");
       console.log("");
       console.log("💡 Ready to accept requests!");
     });
+
+    // Store server reference for graceful shutdown
+    (global as any).httpServer = server;
+
   } catch (error) {
     console.error("💥 Failed to start server:", error);
+    
+    // Provide helpful error messages for common issues
+    if (error instanceof Error) {
+      if (error.name === 'EnvironmentValidationError') {
+        console.error('\n🔧 Fix: Ensure your .env file contains all required database credentials');
+        console.error('Required variables: DB_*_HOST, DB_*_PORT, DB_*_USER, DB_*_PASSWORD, DB_*_NAME');
+        console.error('Where * is: SSO, WIS, WISAKA, WISMON');
+      } else if (error.message.includes('ECONNREFUSED')) {
+        console.error('\n🔧 Fix: Ensure MySQL server is running and accessible');
+      } else if (error.message.includes('ENOTFOUND')) {
+        console.error('\n🔧 Fix: Check database host configuration');
+      }
+    }
+    
+    // Ensure graceful cleanup before exit
+    await closeDatabaseConnections();
     process.exit(1);
   }
 }
 
-// Handle graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("🛑 SIGTERM received. Shutting down gracefully...");
-  process.exit(0);
-});
+// Enhanced graceful shutdown handler
+async function gracefulShutdown(signal: string) {
+  console.log(`\n🛑 ${signal} received. Initiating graceful shutdown...`);
+  
+  try {
+    // Close HTTP server
+    const server = (global as any).httpServer;
+    if (server) {
+      console.log('🔄 Closing HTTP server...');
+      await new Promise<void>((resolve, reject) => {
+        server.close((err: Error | undefined) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      console.log('✅ HTTP server closed');
+    }
+    
+    // Close database connections
+    await closeDatabaseConnections();
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+    
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+}
 
-process.on("SIGINT", () => {
-  console.log("🛑 SIGINT received. Shutting down gracefully...");
-  process.exit(0);
-});
+// Handle graceful shutdown signals
+process.on("SIGTERM", () => gracefulShutdown('SIGTERM'));
+process.on("SIGINT", () => gracefulShutdown('SIGINT'));
 
 // Handle unhandled promise rejections
-process.on("unhandledRejection", (reason, promise) => {
+process.on("unhandledRejection", async (reason, promise) => {
   console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
+  
+  // Attempt graceful shutdown
+  try {
+    await closeDatabaseConnections();
+  } catch (error) {
+    console.error('Error closing connections during unhandled rejection:', error);
+  }
+  
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error) => {
+  console.error('💥 Uncaught Exception:', error);
+  
+  // Attempt graceful shutdown
+  try {
+    await closeDatabaseConnections();
+  } catch (shutdownError) {
+    console.error('Error closing connections during uncaught exception:', shutdownError);
+  }
+  
   process.exit(1);
 });
 

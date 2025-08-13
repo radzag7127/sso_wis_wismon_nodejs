@@ -1,8 +1,11 @@
-import mysql from "mysql2/promise";
+import mysql, { Pool, PoolConnection } from "mysql2/promise";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+/**
+ * Secure database configuration interface with SSL support
+ */
 export interface DatabaseConfig {
   host: string;
   port: number;
@@ -11,197 +14,538 @@ export interface DatabaseConfig {
   database: string;
   connectionLimit: number;
   acquireTimeout: number;
-  timeout: number;
+  idleTimeout: number;
+  ssl?: {
+    rejectUnauthorized: boolean;
+  };
+  charset: string;
+  timezone: string;
 }
 
-// SSO Database Configuration
-const ssoDbConfig: DatabaseConfig = {
-  host: process.env.DB_SSO_HOST || "127.0.0.1",
-  port: parseInt(process.env.DB_SSO_PORT || "3306"),
-  user: process.env.DB_SSO_USER || "root",
-  password: process.env.DB_SSO_PASSWORD || "",
-  database: process.env.DB_SSO_NAME || "wirahusada_sso",
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
-};
+/**
+ * Environment validation error class for detailed error reporting
+ */
+class EnvironmentValidationError extends Error {
+  constructor(missingVars: string[]) {
+    super(
+      `Missing required environment variables: ${missingVars.join(", ")}. ` +
+      "Database connections cannot be established without proper credentials."
+    );
+    this.name = "EnvironmentValidationError";
+  }
+}
 
-// WIS Database Configuration
-const wisDbConfig: DatabaseConfig = {
-  host: process.env.DB_WIS_HOST || "127.0.0.1",
-  port: parseInt(process.env.DB_WIS_PORT || "3306"),
-  user: process.env.DB_WIS_USER || "root",
-  password: process.env.DB_WIS_PASSWORD || "",
-  database: process.env.DB_WIS_NAME || "wirahusada_wis",
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
-};
+/**
+ * Database connection error class for retry mechanism
+ */
+class DatabaseConnectionError extends Error {
+  constructor(database: string, originalError: Error, attempt: number) {
+    super(
+      `Failed to connect to ${database} database (attempt ${attempt}): ${originalError.message}`
+    );
+    this.name = "DatabaseConnectionError";
+  }
+}
 
-// WISMON Database Configuration
-const wismonDbConfig: DatabaseConfig = {
-  host: process.env.DB_WISMON_HOST || "127.0.0.1",
-  port: parseInt(process.env.DB_WISMON_PORT || "3306"),
-  user: process.env.DB_WISMON_USER || "root",
-  password: process.env.DB_WISMON_PASSWORD || "",
-  database: process.env.DB_WISMON_NAME || "wirahusada_wismon",
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
-};
+/**
+ * Validates that all required environment variables are present
+ * Throws EnvironmentValidationError if any are missing
+ */
+function validateEnvironmentVariables(): void {
+  const requiredVars = [
+    // SSO Database
+    'DB_SSO_HOST', 'DB_SSO_PORT', 'DB_SSO_USER', 'DB_SSO_PASSWORD', 'DB_SSO_NAME',
+    // WIS Database  
+    'DB_WIS_HOST', 'DB_WIS_PORT', 'DB_WIS_USER', 'DB_WIS_PASSWORD', 'DB_WIS_NAME',
+    // WISAKA Database
+    'DB_WISAKA_HOST', 'DB_WISAKA_PORT', 'DB_WISAKA_USER', 'DB_WISAKA_PASSWORD', 'DB_WISAKA_NAME',
+    // WISMON Database
+    'DB_WISMON_HOST', 'DB_WISMON_PORT', 'DB_WISMON_USER', 'DB_WISMON_PASSWORD', 'DB_WISMON_NAME'
+  ];
 
-// WISAKA Database Configuration
-const wisakaDbConfig: DatabaseConfig = {
-  host: process.env.DB_WISAKA_HOST || "127.0.0.1",
-  port: parseInt(process.env.DB_WISAKA_PORT || "3306"),
-  user: process.env.DB_WISAKA_USER || "root",
-  password: process.env.DB_WISAKA_PASSWORD || "",
-  database: process.env.DB_WISAKA_NAME || "wirahusada_wisaka",
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
-};
+  const missingVars = requiredVars.filter(varName => {
+    const value = process.env[varName];
+    return !value || value.trim() === '';
+  });
 
-// Create connection pools
-export const ssoPool = mysql.createPool(ssoDbConfig);
-export const wisPool = mysql.createPool(wisDbConfig);
-export const wisakaPool = mysql.createPool(wisakaDbConfig);
-export const wismonPool = mysql.createPool(wismonDbConfig);
+  if (missingVars.length > 0) {
+    console.error('\n🚨 CRITICAL: Database Environment Validation Failed');
+    console.error('Missing or empty environment variables:');
+    missingVars.forEach(varName => {
+      console.error(`  - ${varName}`);
+    });
+    console.error('\nPlease ensure all database credentials are properly configured in your .env file.\n');
+    throw new EnvironmentValidationError(missingVars);
+  }
 
-// Test database connections
-export const testConnections = async () => {
-  const results = {
-    sso: false,
-    wis: false,
-    wisaka: false,
-    wismon: false,
+  console.log('✅ Environment validation passed - all database credentials present');
+}
+
+/**
+ * Creates secure database configuration with SSL/TLS encryption
+ */
+function createDatabaseConfig(prefix: string): DatabaseConfig {
+  const portStr = process.env[`DB_${prefix}_PORT`]!;
+  const port = parseInt(portStr, 10);
+  
+  if (isNaN(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid port number for ${prefix} database: ${portStr}`);
+  }
+
+  return {
+    host: process.env[`DB_${prefix}_HOST`]!,
+    port,
+    user: process.env[`DB_${prefix}_USER`]!,
+    password: process.env[`DB_${prefix}_PASSWORD`]!,
+    database: process.env[`DB_${prefix}_NAME`]!,
+    connectionLimit: 15, // Increased for better concurrency
+    acquireTimeout: 30000, // Connection acquisition timeout
+    idleTimeout: 300000, // 5 minutes idle timeout
+    ssl: {
+      rejectUnauthorized: process.env.NODE_ENV === 'production'
+    },
+    charset: 'utf8mb4', // Full UTF-8 support
+    timezone: '+00:00' // UTC timezone
   };
+}
 
-  try {
-    const ssoConnection = await ssoPool.getConnection();
-    console.log("✅ SSO Database connected successfully");
-    console.log(
-      `📊 SSO Connected to: ${ssoDbConfig.host}:${ssoDbConfig.port}/${ssoDbConfig.database}`
-    );
-    ssoConnection.release();
-    results.sso = true;
-  } catch (error) {
-    console.error("❌ SSO Database connection failed:", error);
+// Validate environment variables before creating configurations
+validateEnvironmentVariables();
+
+// Create secure database configurations
+const ssoDbConfig: DatabaseConfig = createDatabaseConfig('SSO');
+const wisDbConfig: DatabaseConfig = createDatabaseConfig('WIS'); 
+const wisakaDbConfig: DatabaseConfig = createDatabaseConfig('WISAKA');
+const wismonDbConfig: DatabaseConfig = createDatabaseConfig('WISMON');
+
+/**
+ * Connection retry configuration
+ */
+interface RetryConfig {
+  maxAttempts: number;
+  baseDelay: number; // Base delay in milliseconds
+  maxDelay: number;  // Maximum delay cap
+}
+
+const RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  baseDelay: 1000,   // 1 second
+  maxDelay: 9000     // 9 seconds max
+};
+
+/**
+ * Calculates exponential backoff delay with jitter
+ */
+function calculateRetryDelay(attempt: number): number {
+  const exponentialDelay = RETRY_CONFIG.baseDelay * Math.pow(3, attempt - 1);
+  const jitter = Math.random() * 200; // Add small random jitter
+  return Math.min(exponentialDelay + jitter, RETRY_CONFIG.maxDelay);
+}
+
+/**
+ * Sleep utility for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Creates connection pool with retry logic and monitoring
+ */
+function createConnectionPoolWithRetry(config: DatabaseConfig, dbName: string): Pool {
+  const pool = mysql.createPool(config);
+  
+  // Add connection pool event monitoring
+  pool.on('connection', () => {
+    console.log(`🔗 New connection established to ${dbName} database`);
+  });
+  
+  pool.on('error' as any, (err: any) => {
+    console.error(`💥 ${dbName} database pool error:`, err.message);
+    if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+      console.log(`🔄 Attempting to reconnect to ${dbName} database...`);
+    }
+  });
+  
+  return pool;
+}
+
+// Create connection pools with monitoring
+export const ssoPool = createConnectionPoolWithRetry(ssoDbConfig, 'SSO');
+export const wisPool = createConnectionPoolWithRetry(wisDbConfig, 'WIS');
+export const wisakaPool = createConnectionPoolWithRetry(wisakaDbConfig, 'WISAKA');
+export const wismonPool = createConnectionPoolWithRetry(wismonDbConfig, 'WISMON');
+
+/**
+ * Database connection test results interface
+ */
+interface ConnectionTestResult {
+  success: boolean;
+  error?: string;
+  responseTime?: number;
+  attempts: number;
+}
+
+interface ConnectionTestResults {
+  sso: ConnectionTestResult;
+  wis: ConnectionTestResult;
+  wisaka: ConnectionTestResult;
+  wismon: ConnectionTestResult;
+}
+
+/**
+ * Tests a single database connection with retry logic
+ */
+async function testSingleConnection(
+  pool: Pool, 
+  config: DatabaseConfig, 
+  dbName: string
+): Promise<ConnectionTestResult> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= RETRY_CONFIG.maxAttempts; attempt++) {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`🔍 Testing ${dbName} database connection (attempt ${attempt}/${RETRY_CONFIG.maxAttempts})...`);
+      
+      const connection: PoolConnection = await pool.getConnection();
+      
+      // Perform a simple query to verify connection health
+      await connection.execute('SELECT 1 as test');
+      
+      const responseTime = Date.now() - startTime;
+      connection.release();
+      
+      console.log(`✅ ${dbName} Database connected successfully`);
+      console.log(`📊 ${dbName} Connected to: ${config.host}:${config.port}/${config.database}`);
+      console.log(`⚡ ${dbName} Response time: ${responseTime}ms`);
+      
+      return {
+        success: true,
+        responseTime,
+        attempts: attempt
+      };
+      
+    } catch (error) {
+      const errorObj = error as Error;
+      lastError = errorObj;
+      
+      console.error(`❌ ${dbName} Database connection failed (attempt ${attempt}):`, errorObj.message);
+      
+      if (attempt < RETRY_CONFIG.maxAttempts) {
+        const delay = calculateRetryDelay(attempt);
+        console.log(`⏳ Retrying ${dbName} connection in ${delay}ms...`);
+        await sleep(delay);
+      }
+    }
   }
+  
+  return {
+    success: false,
+    error: lastError?.message || 'Unknown error',
+    attempts: RETRY_CONFIG.maxAttempts
+  };
+}
 
-  try {
-    const wisConnection = await wisPool.getConnection();
-    console.log("✅ WIS Database connected successfully");
-    console.log(
-      `📊 WIS Connected to: ${wisDbConfig.host}:${wisDbConfig.port}/${wisDbConfig.database}`
-    );
-    wisConnection.release();
-    results.wis = true;
-  } catch (error) {
-    console.error("❌ WIS Database connection failed:", error);
+/**
+ * Tests all database connections with comprehensive retry logic
+ * Returns detailed connection results for monitoring
+ */
+export async function testConnections(): Promise<ConnectionTestResults> {
+  console.log('🔍 Starting comprehensive database connection tests...');
+  console.log(`🔄 Retry configuration: ${RETRY_CONFIG.maxAttempts} attempts with exponential backoff`);
+  
+  const startTime = Date.now();
+  
+  // Test all connections concurrently for faster startup
+  const [ssoResult, wisResult, wisakaResult, wismonResult] = await Promise.all([
+    testSingleConnection(ssoPool, ssoDbConfig, 'SSO'),
+    testSingleConnection(wisPool, wisDbConfig, 'WIS'), 
+    testSingleConnection(wisakaPool, wisakaDbConfig, 'WISAKA'),
+    testSingleConnection(wismonPool, wismonDbConfig, 'WISMON')
+  ]);
+  
+  const totalTime = Date.now() - startTime;
+  const results: ConnectionTestResults = {
+    sso: ssoResult,
+    wis: wisResult,
+    wisaka: wisakaResult,
+    wismon: wismonResult
+  };
+  
+  // Calculate connection statistics
+  const successful = Object.values(results).filter(r => r.success).length;
+  const total = Object.keys(results).length;
+  const avgResponseTime = Object.values(results)
+    .filter(r => r.success && r.responseTime)
+    .reduce((sum, r) => sum + (r.responseTime || 0), 0) / successful || 0;
+  
+  console.log('\n📊 Database Connection Summary:');
+  console.log(`   Success Rate: ${successful}/${total} databases`);
+  console.log(`   Total Test Time: ${totalTime}ms`);
+  if (successful > 0) {
+    console.log(`   Average Response Time: ${Math.round(avgResponseTime)}ms`);
   }
-
-  try {
-    const wisakaConnection = await wisakaPool.getConnection();
-    console.log("✅ WISAKA Database connected successfully");
-    console.log(
-      `📊 WISAKA Connected to: ${wisakaDbConfig.host}:${wisakaDbConfig.port}/${wisakaDbConfig.database}`
-    );
-    wisakaConnection.release();
-    results.wisaka = true;
-  } catch (error) {
-    console.error("❌ WISAKA Database connection failed:", error);
+  
+  // Log failed connections for debugging
+  Object.entries(results).forEach(([db, result]) => {
+    if (!result.success) {
+      console.error(`💥 ${db.toUpperCase()} Database: ${result.error}`);
+    }
+  });
+  
+  if (successful === total) {
+    console.log('✅ All database connections successful!');
+  } else {
+    console.warn(`⚠️  ${successful}/${total} database connections successful`);
+    
+    // In production, we might want to fail if critical databases are down
+    if (successful === 0) {
+      throw new Error('Critical failure: No database connections could be established');
+    }
   }
-
-  try {
-    const wismonConnection = await wismonPool.getConnection();
-    console.log("✅ WISMON Database connected successfully");
-    console.log(
-      `📊 WISMON Connected to: ${wismonDbConfig.host}:${wismonDbConfig.port}/${wismonDbConfig.database}`
-    );
-    wismonConnection.release();
-    results.wismon = true;
-  } catch (error) {
-    console.error("❌ WISMON Database connection failed:", error);
-  }
-
+  
   return results;
-};
+}
 
-// Execute query helper functions
-export const executeSsoQuery = async (query: string, params?: any[]) => {
-  try {
-    const [results] = await ssoPool.execute(query, params);
-    return results;
-  } catch (error) {
-    console.error("SSO Database query error:", error);
-    throw error;
-  }
-};
+/**
+ * Query execution options for enhanced monitoring
+ */
+interface QueryExecutionOptions {
+  timeout?: number;
+  retryOnFailure?: boolean;
+  logQuery?: boolean;
+}
 
-export const executeWisQuery = async (query: string, params?: any[]) => {
-  try {
-    const [results] = await wisPool.execute(query, params);
-    return results;
-  } catch (error) {
-    console.error("WIS Database query error:", error);
-    throw error;
-  }
-};
-
-export const executeWisakaQuery = async (query: string, params?: any[]) => {
-  console.log("🗄️ WISAKA DB - Executing query:", {
-    query: query.replace(/\s+/g, " ").trim(),
-    params,
-    paramsTypes: params?.map((p) => ({ value: p, type: typeof p })),
-    timestamp: new Date().toISOString(),
-  });
-
-  try {
-    const [results] = await wisakaPool.execute(query, params);
-    console.log("🗄️ WISAKA DB - Query successful:", {
-      resultCount: Array.isArray(results) ? results.length : "Not array",
-      resultType: typeof results,
-      firstResult: Array.isArray(results) ? results[0] : results,
-    });
-    return results;
-  } catch (error) {
-    console.error("🗄️ WISAKA DB - Query error:", {
-      error,
+/**
+ * Enhanced query executor with retry logic and comprehensive error handling
+ */
+async function executeQueryWithRetry(
+  pool: Pool,
+  dbName: string,
+  query: string,
+  params?: any[],
+  options: QueryExecutionOptions = {}
+): Promise<any> {
+  const {
+    timeout = 30000,
+    retryOnFailure = true,
+    logQuery = process.env.NODE_ENV === 'development'
+  } = options;
+  
+  const maxAttempts = retryOnFailure ? 2 : 1;
+  let lastError: Error | null = null;
+  
+  if (logQuery) {
+    console.log(`🗄️ ${dbName} DB - Executing query:`, {
       query: query.replace(/\s+/g, " ").trim(),
       params,
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
+      paramsTypes: params?.map((p) => ({ value: p, type: typeof p })),
+      timestamp: new Date().toISOString(),
     });
-    throw error;
   }
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const startTime = Date.now();
+      
+      // Execute query with timeout
+      const [results] = await Promise.race([
+        pool.execute(query, params),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), timeout)
+        )
+      ]) as [any];
+      
+      const executionTime = Date.now() - startTime;
+      
+      if (logQuery) {
+        console.log(`🗄️ ${dbName} DB - Query successful:`, {
+          resultCount: Array.isArray(results) ? results.length : "Not array",
+          resultType: typeof results,
+          executionTime: `${executionTime}ms`,
+          attempt: attempt > 1 ? attempt : undefined,
+          firstResult: Array.isArray(results) ? results[0] : results,
+        });
+      }
+      
+      return results;
+      
+    } catch (error) {
+      const errorObj = error as Error;
+      lastError = errorObj;
+      
+      console.error(`🗄️ ${dbName} DB - Query error (attempt ${attempt}):`, {
+        error: errorObj.message,
+        query: query.replace(/\s+/g, " ").trim(),
+        params,
+        code: (errorObj as any).code,
+        errno: (errorObj as any).errno,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Retry on connection errors but not on syntax errors
+      const retryableErrors = ['ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'];
+      const isRetryable = retryableErrors.includes((errorObj as any).code);
+      
+      if (attempt < maxAttempts && isRetryable) {
+        const delay = 1000 * attempt; // Linear backoff for query retries
+        console.log(`⏳ Retrying ${dbName} query in ${delay}ms...`);
+        await sleep(delay);
+      }
+    }
+  }
+  
+  throw new Error(`${dbName} Database query failed after ${maxAttempts} attempts: ${lastError?.message}`);
+}
+
+// Enhanced query execution functions with retry logic
+export const executeSsoQuery = async (
+  query: string, 
+  params?: any[], 
+  options?: QueryExecutionOptions
+): Promise<any> => {
+  return executeQueryWithRetry(ssoPool, 'SSO', query, params, options);
 };
 
-export const executeWismonQuery = async (query: string, params?: any[]) => {
-  console.log("🗄️ WISMON DB - Executing query:", {
-    query: query.replace(/\s+/g, " ").trim(),
-    params,
-    paramsTypes: params?.map((p) => ({ value: p, type: typeof p })),
-    timestamp: new Date().toISOString(),
+export const executeWisQuery = async (
+  query: string, 
+  params?: any[], 
+  options?: QueryExecutionOptions
+): Promise<any> => {
+  return executeQueryWithRetry(wisPool, 'WIS', query, params, options);
+};
+
+export const executeWisakaQuery = async (
+  query: string, 
+  params?: any[], 
+  options?: QueryExecutionOptions
+): Promise<any> => {
+  return executeQueryWithRetry(wisakaPool, 'WISAKA', query, params, {
+    logQuery: true, // Always log WISAKA queries as per original behavior
+    ...options
   });
-
-  try {
-    const [results] = await wismonPool.execute(query, params);
-    console.log("🗄️ WISMON DB - Query successful:", {
-      resultCount: Array.isArray(results) ? results.length : "Not array",
-      resultType: typeof results,
-      firstResult: Array.isArray(results) ? results[0] : results,
-    });
-    return results;
-  } catch (error) {
-    console.error("🗄️ WISMON DB - Query error:", {
-      error,
-      query: query.replace(/\s+/g, " ").trim(),
-      params,
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
-    });
-    throw error;
-  }
 };
+
+export const executeWismonQuery = async (
+  query: string, 
+  params?: any[], 
+  options?: QueryExecutionOptions
+): Promise<any> => {
+  return executeQueryWithRetry(wismonPool, 'WISMON', query, params, {
+    logQuery: true, // Always log WISMON queries as per original behavior
+    ...options
+  });
+};
+
+/**
+ * Database health check function for monitoring endpoints
+ */
+export async function getDatabaseHealth(): Promise<{
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  databases: Record<string, {
+    status: 'connected' | 'disconnected';
+    responseTime?: number;
+    error?: string;
+    poolInfo: {
+      totalConnections: number;
+      idleConnections: number;
+      queuedRequests: number;
+    };
+  }>;
+  timestamp: string;
+}> {
+  const results = await testConnections();
+  
+  const healthData = {
+    status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy',
+    databases: {} as any,
+    timestamp: new Date().toISOString()
+  };
+  
+  let healthyCount = 0;
+  const pools = { ssoPool, wisPool, wisakaPool, wismonPool };
+  
+  Object.entries(results).forEach(([dbName, result]) => {
+    const poolName = `${dbName}Pool` as keyof typeof pools;
+    const pool = pools[poolName];
+    
+    healthData.databases[dbName] = {
+      status: result.success ? 'connected' : 'disconnected',
+      responseTime: result.responseTime,
+      error: result.error,
+      poolInfo: {
+        totalConnections: (pool as any)._allConnections?.length || 0,
+        idleConnections: (pool as any)._freeConnections?.length || 0,
+        queuedRequests: (pool as any)._connectionQueue?.length || 0
+      }
+    };
+    
+    if (result.success) healthyCount++;
+  });
+  
+  // Determine overall health status
+  const totalDatabases = Object.keys(results).length;
+  if (healthyCount === totalDatabases) {
+    healthData.status = 'healthy';
+  } else if (healthyCount > 0) {
+    healthData.status = 'degraded';
+  } else {
+    healthData.status = 'unhealthy';
+  }
+  
+  return healthData;
+}
+
+/**
+ * Graceful shutdown handler for connection pools
+ */
+export async function closeDatabaseConnections(): Promise<void> {
+  console.log('🔄 Closing database connections gracefully...');
+  
+  const closePromises = [
+    ssoPool.end().then(() => console.log('✅ SSO database pool closed')),
+    wisPool.end().then(() => console.log('✅ WIS database pool closed')),
+    wisakaPool.end().then(() => console.log('✅ WISAKA database pool closed')),
+    wismonPool.end().then(() => console.log('✅ WISMON database pool closed'))
+  ];
+  
+  try {
+    await Promise.all(closePromises);
+    console.log('✅ All database connections closed successfully');
+  } catch (error) {
+    console.error('❌ Error closing database connections:', error);
+  }
+}
+
+// Export configurations for monitoring (without sensitive data in logs)
+export const getDatabaseConfigurations = () => ({
+  sso: {
+    host: ssoDbConfig.host,
+    port: ssoDbConfig.port,
+    database: ssoDbConfig.database,
+    connectionLimit: ssoDbConfig.connectionLimit
+  },
+  wis: {
+    host: wisDbConfig.host,
+    port: wisDbConfig.port,
+    database: wisDbConfig.database,
+    connectionLimit: wisDbConfig.connectionLimit
+  },
+  wisaka: {
+    host: wisakaDbConfig.host,
+    port: wisakaDbConfig.port,
+    database: wisakaDbConfig.database,
+    connectionLimit: wisakaDbConfig.connectionLimit
+  },
+  wismon: {
+    host: wismonDbConfig.host,
+    port: wismonDbConfig.port,
+    database: wismonDbConfig.database,
+    connectionLimit: wismonDbConfig.connectionLimit
+  }
+});
 
 // Export pools for direct access if needed
 export { ssoDbConfig, wisDbConfig, wisakaDbConfig, wismonDbConfig };

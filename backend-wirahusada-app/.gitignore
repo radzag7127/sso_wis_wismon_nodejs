@@ -48,3 +48,6 @@ coverage/
 # Temporary folders
 tmp/
 temp/ 
+
+.env.example
+SECURITY_IMPROVEMENTS.md
