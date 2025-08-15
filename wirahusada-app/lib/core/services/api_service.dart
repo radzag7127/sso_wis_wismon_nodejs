@@ -18,7 +18,7 @@ import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dar
 class TokenExpiredException implements Exception {
   final String message;
   TokenExpiredException(this.message);
-  
+
   @override
   String toString() => 'TokenExpiredException: $message';
 }
@@ -31,8 +31,8 @@ class ApiService {
   static const String baseUrl = 'http://10.0.2.2:3000';
   static http.Client? _client;
   static final Map<String, dynamic> _cache = {};
-  static const int _cacheTimeout = 5 * 60 * 1000; // 5 minutes
-  
+  static const int _cacheTimeout = 5 * 60 * 1000; // 5 min
+
   // Token refresh management
   static bool _isRefreshing = false;
   static final List<Function()> _refreshQueue = [];
@@ -168,11 +168,11 @@ class ApiService {
     try {
       final expiry = await getTokenExpiry();
       if (expiry == null) return true;
-      
+
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       // Consider token expiring soon if less than 2 minutes remaining
       const buffer = 120; // 2 minutes in seconds
-      
+
       return (expiry - now) <= buffer;
     } catch (e) {
       return true; // Assume expired on error
@@ -305,18 +305,18 @@ class ApiService {
         final accessToken = data['data']['accessToken'];
         if (accessToken != null) {
           await setAuthToken(accessToken);
-          
+
           // Also store refresh token if available
           final refreshToken = data['data']['refreshToken'];
           if (refreshToken != null) {
             await setRefreshToken(refreshToken);
           }
-          
+
           // Store token expiry if available (backend should provide expiresIn in seconds)
           // Handle both String and int types from backend
           final expiresInRaw = data['data']['expiresIn'];
           int? expiresIn;
-          
+
           if (expiresInRaw != null) {
             if (expiresInRaw is int) {
               expiresIn = expiresInRaw;
@@ -324,22 +324,28 @@ class ApiService {
               expiresIn = int.tryParse(expiresInRaw);
             }
           }
-          
+
           if (expiresIn != null) {
-            final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
+            final expiryTime =
+                (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
             await setTokenExpiry(expiryTime);
             if (kDebugMode) {
-              print('✅ Token expiry set for: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn: $expiresIn seconds)');
+              print(
+                '✅ Token expiry set for: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn: $expiresIn seconds)',
+              );
             }
           } else {
             // Default to 15 minutes if not provided (backend default)
-            final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
+            final expiryTime =
+                (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
             await setTokenExpiry(expiryTime);
             if (kDebugMode) {
-              print('⚠️ Using default 15min expiry: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn was: $expiresInRaw)');
+              print(
+                '⚠️ Using default 15min expiry: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn was: $expiresInRaw)',
+              );
             }
           }
-          
+
           if (kDebugMode) {
             print('✅ Tokens and expiry saved successfully');
           }
@@ -506,7 +512,7 @@ class ApiService {
     }
 
     _isRefreshing = true;
-    
+
     try {
       final refreshToken = await getRefreshToken();
       if (refreshToken == null) {
@@ -536,18 +542,18 @@ class ApiService {
         if (data['success'] == true) {
           final newAccessToken = data['data']['accessToken'];
           final newRefreshToken = data['data']['refreshToken'];
-          
+
           if (newAccessToken != null) {
             await setAuthToken(newAccessToken);
             if (newRefreshToken != null) {
               await setRefreshToken(newRefreshToken);
             }
-            
+
             // Update token expiry
             // Handle both String and int types from backend
             final expiresInRaw = data['data']['expiresIn'];
             int? expiresIn;
-            
+
             if (expiresInRaw != null) {
               if (expiresInRaw is int) {
                 expiresIn = expiresInRaw;
@@ -555,27 +561,29 @@ class ApiService {
                 expiresIn = int.tryParse(expiresInRaw);
               }
             }
-            
+
             if (expiresIn != null) {
-              final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
+              final expiryTime =
+                  (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
               await setTokenExpiry(expiryTime);
             } else {
               // Default to 15 minutes if not provided
-              final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
+              final expiryTime =
+                  (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
               await setTokenExpiry(expiryTime);
             }
-            
+
             if (kDebugMode) {
               print('✅ Token refresh successful');
             }
-            
+
             // Process queued requests
             _processRefreshQueue();
             return true;
           }
         }
       }
-      
+
       if (kDebugMode) {
         print('❌ Token refresh failed: ${response.statusCode}');
       }
@@ -614,7 +622,7 @@ class ApiService {
       if (kDebugMode) {
         print('🔄 Token expired, attempting refresh...');
       }
-      
+
       final refreshSuccess = await refreshToken();
       if (refreshSuccess) {
         // Retry the original request with new token

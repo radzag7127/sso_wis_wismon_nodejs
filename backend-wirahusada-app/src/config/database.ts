@@ -1,5 +1,6 @@
-import mysql, { Pool, PoolConnection } from "mysql2/promise";
-import dotenv from "dotenv";
+import * as mysql from "mysql2/promise";
+import { Pool, PoolConnection } from "mysql2/promise";
+import * as dotenv from "dotenv";
 
 dotenv.config();
 
@@ -101,9 +102,14 @@ function createDatabaseConfig(prefix: string): DatabaseConfig {
     connectionLimit: 15, // Increased for better concurrency
     acquireTimeout: 30000, // Connection acquisition timeout
     idleTimeout: 300000, // 5 minutes idle timeout
-    ssl: {
-      rejectUnauthorized: process.env.NODE_ENV === 'production'
-    },
+    // SSL configuration with environment variable override
+    // When DB_REQUIRE_SSL is not 'true', omit ssl property entirely (undefined)
+    // This is compatible with mysql2 PoolOptions which expects string | SslOptions | undefined
+    ...(process.env.DB_REQUIRE_SSL === 'true' && {
+      ssl: {
+        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
+      }
+    }),
     charset: 'utf8mb4', // Full UTF-8 support
     timezone: '+00:00' // UTC timezone
   };
@@ -232,6 +238,16 @@ async function testSingleConnection(
       lastError = errorObj;
       
       console.error(`❌ ${dbName} Database connection failed (attempt ${attempt}):`, errorObj.message);
+      
+      // Provide specific guidance for SSL-related errors
+      if (errorObj.message.includes('secure connection') || 
+          errorObj.message.includes('SSL') || 
+          errorObj.message.includes('TLS')) {
+        console.error(`💡 SSL Connection Error Solution for ${dbName}:`);
+        console.error('   1. Add DB_REQUIRE_SSL=false to your .env file to disable SSL');
+        console.error('   2. Or configure your MySQL server to support SSL connections');
+        console.error('   3. Check if your MySQL server version supports SSL/TLS');
+      }
       
       if (attempt < RETRY_CONFIG.maxAttempts) {
         const delay = calculateRetryDelay(attempt);
