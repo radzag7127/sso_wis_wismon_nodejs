@@ -40,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage>
                     400,
                   ), // Push bottom part below visible area
                   child: SvgPicture.asset(
-                    'assets/LogoWHNProfil.svg',
+                    'assets/logo-whn-profil.svg',
                     width: MediaQuery.of(context).size.width,
                     height:
                         MediaQuery.of(context).size.width *

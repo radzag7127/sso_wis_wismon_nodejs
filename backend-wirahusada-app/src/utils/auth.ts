@@ -8,37 +8,37 @@ import crypto from "crypto";
  */
 const validateJwtSecret = (): string => {
   const jwtSecret = process.env.JWT_SECRET;
-  
+
   if (!jwtSecret) {
     throw new Error(
       "SECURITY ERROR: JWT_SECRET environment variable is required for production security"
     );
   }
-  
+
   if (jwtSecret.length < 32) {
     throw new Error(
       "SECURITY ERROR: JWT_SECRET must be at least 32 characters long for adequate security"
     );
   }
-  
+
   return jwtSecret;
 };
 
 const validateRefreshSecret = (): string => {
   const refreshSecret = process.env.JWT_REFRESH_SECRET;
-  
+
   if (!refreshSecret) {
     throw new Error(
       "SECURITY ERROR: JWT_REFRESH_SECRET environment variable is required for refresh token security"
     );
   }
-  
+
   if (refreshSecret.length < 32) {
     throw new Error(
       "SECURITY ERROR: JWT_REFRESH_SECRET must be at least 32 characters long for adequate security"
     );
   }
-  
+
   return refreshSecret;
 };
 
@@ -84,11 +84,11 @@ export const generateAccessToken = (
     ...payload,
     type: "access",
   };
-  
-  return jwt.sign(tokenPayload, JWT_SECRET, { 
+
+  return jwt.sign(tokenPayload, JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
     issuer: "wismon-api",
-    audience: "wismon-client"
+    audience: "wismon-client",
   });
 };
 
@@ -98,17 +98,17 @@ export const generateAccessToken = (
 export const generateRefreshToken = (
   payload: Omit<RefreshTokenPayload, "iat" | "exp" | "type" | "tokenId">
 ): string => {
-  const tokenId = crypto.randomBytes(16).toString('hex');
+  const tokenId = crypto.randomBytes(16).toString("hex");
   const tokenPayload: Omit<RefreshTokenPayload, "iat" | "exp"> = {
     ...payload,
     tokenId,
     type: "refresh",
   };
-  
-  return jwt.sign(tokenPayload, JWT_REFRESH_SECRET, { 
+
+  return jwt.sign(tokenPayload, JWT_REFRESH_SECRET, {
     expiresIn: REFRESH_TOKEN_EXPIRY,
     issuer: "wismon-api",
-    audience: "wismon-client"
+    audience: "wismon-client",
   });
 };
 
@@ -120,7 +120,7 @@ export const generateTokenPair = (
 ): TokenPair => {
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
-  
+
   return { accessToken, refreshToken };
 };
 
@@ -131,13 +131,13 @@ export const verifyAccessToken = (token: string): JWTPayload => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, {
       issuer: "wismon-api",
-      audience: "wismon-client"
+      audience: "wismon-client",
     }) as JWTPayload;
-    
+
     if (decoded.type !== "access") {
       throw new Error("Invalid token type");
     }
-    
+
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -157,13 +157,13 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
   try {
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET, {
       issuer: "wismon-api",
-      audience: "wismon-client"
+      audience: "wismon-client",
     }) as RefreshTokenPayload;
-    
+
     if (decoded.type !== "refresh") {
       throw new Error("Invalid token type");
     }
-    
+
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -192,35 +192,40 @@ export const authenticateToken = (
     res.status(401).json({
       success: false,
       message: "Access token required",
-      errors: ["Authorization header with Bearer token is required"]
+      errors: ["Authorization header with Bearer token is required"],
     });
     return;
   }
 
   try {
     const decoded = verifyAccessToken(token);
-    
+
     // Attach user info to request object with proper typing
     (req as any).user = {
       nrm: decoded.nrm,
       nim: decoded.nim,
       namam: decoded.namam,
-      tokenType: decoded.type
+      tokenType: decoded.type,
     };
-    
+
     next();
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Token verification failed";
-    
+    const errorMessage =
+      error instanceof Error ? error.message : "Token verification failed";
+
     // Log security events for monitoring
-    console.warn(`🔒 Authentication failed: ${errorMessage} - IP: ${req.ip} - User-Agent: ${req.get('user-agent')}`);
-    
+    console.warn(
+      `🔒 Authentication failed: ${errorMessage} - IP: ${
+        req.ip
+      } - User-Agent: ${req.get("user-agent")}`
+    );
+
     const statusCode = errorMessage.includes("expired") ? 401 : 403;
-    
+
     res.status(statusCode).json({
       success: false,
       message: errorMessage,
-      errors: [errorMessage]
+      errors: [errorMessage],
     });
   }
 };
@@ -240,26 +245,33 @@ export const authenticateRefreshToken = (
     res.status(401).json({
       success: false,
       message: "Refresh token required",
-      errors: ["Refresh token must be provided in httpOnly cookie or request body"]
+      errors: [
+        "Refresh token must be provided in httpOnly cookie or request body",
+      ],
     });
     return;
   }
 
   try {
     const decoded = verifyRefreshToken(refreshToken);
-    
+
     (req as any).refreshTokenData = decoded;
-    
+
     next();
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Refresh token verification failed";
-    
-    console.warn(`🔒 Refresh token validation failed: ${errorMessage} - IP: ${req.ip}`);
-    
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Refresh token verification failed";
+
+    console.warn(
+      `🔒 Refresh token validation failed: ${errorMessage} - IP: ${req.ip}`
+    );
+
     res.status(401).json({
       success: false,
       message: errorMessage,
-      errors: [errorMessage]
+      errors: [errorMessage],
     });
   }
 };
@@ -269,17 +281,17 @@ export const authenticateRefreshToken = (
  */
 export const extractTokenFromHeader = (authHeader?: string): string | null => {
   if (!authHeader) return null;
-  
+
   const parts = authHeader.split(" ");
   if (parts.length !== 2 || parts[0] !== "Bearer") {
     return null;
   }
-  
+
   const token = parts[1];
   if (!token || token.length === 0) {
     return null;
   }
-  
+
   return token;
 };
 
@@ -288,13 +300,13 @@ export const extractTokenFromHeader = (authHeader?: string): string | null => {
  */
 export const getSecureCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === "production";
-  
+
   return {
     httpOnly: true,
     secure: isProduction, // HTTPS only in production
-    sameSite: isProduction ? "strict" as const : "lax" as const,
+    sameSite: isProduction ? ("strict" as const) : ("lax" as const),
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: "/"
+    path: "/",
   };
 };
 

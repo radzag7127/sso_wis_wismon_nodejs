@@ -205,7 +205,10 @@ class _LoginFormState extends State<_LoginForm> {
         const SizedBox(height: 8),
         // Input Container
         Container(
-          height: 40,
+          constraints: const BoxConstraints(
+            minHeight: 40,
+            maxHeight: 56,
+          ),
           decoration: BoxDecoration(
             color: const Color(0xFFFBFBFB),
             borderRadius: BorderRadius.circular(8),
@@ -224,7 +227,8 @@ class _LoginFormState extends State<_LoginForm> {
             ),
             decoration: const InputDecoration(
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              isDense: true,
             ),
           ),
         ),
@@ -240,10 +244,14 @@ class _LoginFormState extends State<_LoginForm> {
           BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               final isLoading = state is AuthLoading;
-              return SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
+              return ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: 48,
+                  maxHeight: 56,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                   onPressed: isLoading ? null : _onLoginPressed,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF135EA2),
@@ -274,6 +282,7 @@ class _LoginFormState extends State<_LoginForm> {
                             letterSpacing: -0.16,
                           ),
                         ),
+                  ),
                 ),
               );
             },

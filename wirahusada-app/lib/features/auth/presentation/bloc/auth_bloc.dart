@@ -5,6 +5,7 @@ import '../../../../core/usecases/usecase.dart';
 import '../../domain/usecases/check_auth_status_usecase.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
+import '../../domain/usecases/refresh_token_usecase.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -12,15 +13,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final LoginUseCase loginUseCase;
   final LogoutUseCase logoutUseCase;
   final CheckAuthStatusUseCase checkAuthStatusUseCase;
+  final RefreshTokenUseCase refreshTokenUseCase;
 
   AuthBloc({
     required this.loginUseCase,
     required this.logoutUseCase,
     required this.checkAuthStatusUseCase,
+    required this.refreshTokenUseCase,
   }) : super(const AuthInitial()) {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LoginRequestedEvent>(_onLoginRequested);
     on<LogoutRequestedEvent>(_onLogoutRequested);
+    on<TokenRefreshRequestedEvent>(_onTokenRefreshRequested);
   }
 
   Future<void> _onCheckAuthStatus(
@@ -83,6 +87,39 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     result.fold(
       (failure) => emit(AuthError(message: _mapFailureToMessage(failure))),
       (_) => emit(const AuthUnauthenticated()),
+    );
+  }
+
+  Future<void> _onTokenRefreshRequested(
+    TokenRefreshRequestedEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (kDebugMode) {
+      print('🔄 [AuthBloc] Token refresh requested');
+    }
+
+    // Don't emit loading state for silent refresh
+    final result = await refreshTokenUseCase(NoParams());
+
+    result.fold(
+      (failure) {
+        if (kDebugMode) {
+          print('❌ [AuthBloc] Token refresh failed: ${_mapFailureToMessage(failure)}');
+        }
+        // Refresh failed, user needs to login again
+        emit(const AuthUnauthenticated());
+      },
+      (success) {
+        if (kDebugMode) {
+          print('✅ [AuthBloc] Token refresh success: $success');
+        }
+        // Don't change state on successful refresh - let current state persist
+        // The API calls will now work with the new token
+        if (!success) {
+          // Refresh failed, user needs to login again
+          emit(const AuthUnauthenticated());
+        }
+      },
     );
   }
 

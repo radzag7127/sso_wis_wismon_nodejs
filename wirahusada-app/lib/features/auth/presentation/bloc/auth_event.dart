@@ -24,3 +24,7 @@ class LoginRequestedEvent extends AuthEvent {
 class LogoutRequestedEvent extends AuthEvent {
   const LogoutRequestedEvent();
 }
+
+class TokenRefreshRequestedEvent extends AuthEvent {
+  const TokenRefreshRequestedEvent();
+}

@@ -8,4 +8,5 @@ abstract class AuthRepository {
   Future<Either<Failure, User>> getCurrentUser();
   Future<Either<Failure, String?>> getToken();
   Future<Either<Failure, void>> clearToken();
+  Future<Either<Failure, bool>> refreshToken();
 }
