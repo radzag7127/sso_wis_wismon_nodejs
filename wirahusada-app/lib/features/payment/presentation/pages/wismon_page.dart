@@ -352,6 +352,7 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _selectedPaymentTypeCode,
+          isExpanded: true,
           onChanged: (String? newValue) {
             if (newValue != null && mounted) {
               setState(() {
@@ -373,13 +374,18 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
                   fontWeight: FontWeight.w500,
                   letterSpacing: -0.14,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             );
           }).toList(),
           decoration: const InputDecoration(
             filled: true,
             fillColor: Color(0xFFFAFAFA),
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            constraints: BoxConstraints(
+              minHeight: 48,
+              maxHeight: 56,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.all(Radius.circular(8)),
               borderSide: BorderSide(color: Color(0xFFE7E7E7), width: 1),
@@ -388,6 +394,11 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
               borderRadius: BorderRadius.all(Radius.circular(8)),
               borderSide: BorderSide(color: Color(0xFFE7E7E7), width: 1),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+              borderSide: BorderSide(color: Color(0xFF135EA2), width: 2),
+            ),
+            isDense: true,
           ),
         ),
       ],

@@ -3,7 +3,6 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/services/api_service.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
-import '../models/user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final ApiService apiService;
@@ -57,6 +56,16 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> refreshToken() async {
+    try {
+      final success = await apiService.refreshToken();
+      return Right(success);
+    } catch (e) {
+      return Left(AuthFailure(e.toString().replaceFirst('Exception: ', '')));
     }
   }
 }

@@ -31,19 +31,20 @@ class _MenuPageState extends State<MenuPage>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Correctly positioned logo background
+          // Responsive positioned logo background
           Positioned(
-            right: 100,
-            bottom: 180,
+            right: MediaQuery.of(context).size.width * 0.15,
+            bottom: MediaQuery.of(context).size.height * 0.2,
             child: RepaintBoundary(
               child: Opacity(
                 opacity: 1,
                 child: Transform.scale(
-                  scale: 4,
+                  scale: MediaQuery.of(context).size.width / 100,
                   child: SvgPicture.asset(
-                    'assets/LOGOWHS.svg',
-                    width: 300,
-                    height: 185,
+                    'assets/logo-whn-menu-aplikasi.svg',
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    height:
+                        MediaQuery.of(context).size.width * 0.8 * (185 / 300),
                     fit: BoxFit.contain,
                   ),
                 ),

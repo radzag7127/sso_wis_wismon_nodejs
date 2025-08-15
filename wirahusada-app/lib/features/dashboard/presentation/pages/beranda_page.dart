@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
+import 'package:wismon_keuangan/core/services/dashboard_preferences_service.dart';
 import 'package:wismon_keuangan/features/payment/presentation/pages/wismon_page.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_page.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_bloc.dart';
@@ -29,6 +30,11 @@ class _BerandaPageState extends State<BerandaPage>
   final PageController _carouselController = PageController();
   int _currentCarouselIndex = 0;
   Timer? _carouselTimer;
+  
+  // Payment preferences for filtering
+  late final DashboardPreferencesService _preferencesService;
+  List<String>? _cachedSelectedTypes;
+  bool _preferencesLoaded = false;
 
   @override
   bool get wantKeepAlive => true; // Keep page alive when switching tabs
@@ -37,6 +43,8 @@ class _BerandaPageState extends State<BerandaPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _preferencesService = di.sl<DashboardPreferencesService>();
+    _loadPreferences();
   }
 
   @override
@@ -84,6 +92,26 @@ class _BerandaPageState extends State<BerandaPage>
 
   void _stopCarouselTimer() {
     _carouselTimer?.cancel();
+  }
+  
+  Future<void> _loadPreferences() async {
+    try {
+      final types = await _preferencesService.getSelectedPaymentTypes();
+      if (mounted) {
+        setState(() {
+          _cachedSelectedTypes = types;
+          _preferencesLoaded = true;
+        });
+      }
+    } catch (e) {
+      // Handle error gracefully, use defaults
+      if (mounted) {
+        setState(() {
+          _cachedSelectedTypes = DashboardPreferencesService.defaultPaymentTypes;
+          _preferencesLoaded = true;
+        });
+      }
+    }
   }
 
   Future<void> _openArticleUrl(String? articleUrl) async {
@@ -267,7 +295,7 @@ class _BerandaPageState extends State<BerandaPage>
           SizedBox(
             height: 36,
             child: SvgPicture.asset(
-              'wira-husada-nusantara-homepage.svg',
+              'assets/wira-husada-nusantara-homepage.svg',
               fit: BoxFit.contain,
             ),
           ),
@@ -516,7 +544,7 @@ class _BerandaPageState extends State<BerandaPage>
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 1.8,
+              childAspectRatio: 1.6, // Reduced from 1.8 to provide more height
               crossAxisSpacing: 9,
               mainAxisSpacing: 12,
             ),
@@ -558,25 +586,33 @@ class _BerandaPageState extends State<BerandaPage>
             }
           },
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12), // Reduced from 16 to save space
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min, // Added to prevent overflow
               children: [
                 Icon(
                   _getServiceIcon(service.id),
-                  size: 40,
+                  size: 32, // Reduced from 40 to save space
                   color: const Color(0xFF1C1D1F),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  service.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF1C1D1F),
-                    letterSpacing: -0.16,
+                const SizedBox(height: 6), // Reduced from 8
+                Flexible(
+                  // Wrapped text in Flexible to prevent overflow
+                  child: Text(
+                    service.title,
+                    style: const TextStyle(
+                      fontSize: 14, // Reduced from 16
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF1C1D1F),
+                      letterSpacing: -0.14,
+                      height: 1.2, // Added line height for better readability
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2, // Allow up to 2 lines
+                    overflow: TextOverflow
+                        .ellipsis, // Handle text overflow gracefully
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -657,26 +693,28 @@ class _BerandaPageState extends State<BerandaPage>
     );
   }
 
-  // Same logic as wismon_page.dart _buildPaymentSummary method
+  // Updated logic based on wismon_page.dart _buildPaymentSummary method with filtering
   Widget _buildPaymentSummaryCards(PaymentSummary summary) {
-    // Map database payment types to user-friendly names
-    const paymentTypeMapping = {
-      'SPP': 'SPP',
-      'SWP': 'SWP',
-      'Pendaftaran Mahasiswa Baru': 'Pendaftaran Mahasiswa Baru',
-      'Praktek Rumah Sakit': 'Praktek Rumah Sakit',
-      'Seragam': 'Seragam',
-      'Wisuda': 'Wisuda',
-      'KTI dan Wisuda': 'KTI dan Wisuda',
-    };
+    // Use cached preferences instead of static mapping
+    if (!_preferencesLoaded || _cachedSelectedTypes == null) {
+      return const SizedBox(
+        height: 80,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    // Filter summary to only show what's in the mapping and has a value > 0
-    final filteredBreakdown = summary.breakdown.entries
-        .where(
-          (entry) =>
-              paymentTypeMapping.containsKey(entry.key) && entry.value > 0,
-        )
-        .toList();
+    final selectedTypes = _cachedSelectedTypes!;
+    if (selectedTypes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Create filtered breakdown based on user preferences (same as wismon_page)
+    final List<MapEntry<String, double>> filteredBreakdown = [];
+
+    for (final selectedType in selectedTypes) {
+      final amount = summary.breakdown[selectedType] ?? 0.0;
+      filteredBreakdown.add(MapEntry(selectedType, amount));
+    }
 
     if (filteredBreakdown.isEmpty) {
       return Container(
@@ -699,7 +737,7 @@ class _BerandaPageState extends State<BerandaPage>
       final item1 = filteredBreakdown[i];
       final card1 = Expanded(
         child: PaymentSummaryCard(
-          title: paymentTypeMapping[item1.key]!,
+          title: item1.key,
           amount: item1.value,
         ),
       );
@@ -710,7 +748,7 @@ class _BerandaPageState extends State<BerandaPage>
         final item2 = filteredBreakdown[i + 1];
         final card2 = Expanded(
           child: PaymentSummaryCard(
-            title: paymentTypeMapping[item2.key]!,
+            title: item2.key,
             amount: item2.value,
           ),
         );

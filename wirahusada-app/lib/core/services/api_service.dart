@@ -14,6 +14,15 @@ import 'package:flutter/foundation.dart';
 // --- PERUBAHAN: Import entitas Course agar bisa digunakan di fungsi baru ---
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 
+// Custom exception for token expiration
+class TokenExpiredException implements Exception {
+  final String message;
+  TokenExpiredException(this.message);
+  
+  @override
+  String toString() => 'TokenExpiredException: $message';
+}
+
 class ApiService {
   // API Base URL
   // For Chrome/Web development: http://localhost:3000
@@ -23,6 +32,10 @@ class ApiService {
   static http.Client? _client;
   static final Map<String, dynamic> _cache = {};
   static const int _cacheTimeout = 5 * 60 * 1000; // 5 minutes
+  
+  // Token refresh management
+  static bool _isRefreshing = false;
+  static final List<Function()> _refreshQueue = [];
 
   // Smart logging configuration
   static const bool _enableVerboseLogging =
@@ -108,8 +121,61 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('auth_token');
+      await prefs.remove('refresh_token');
+      await prefs.remove('token_expiry');
     } catch (e) {
       // Handle error gracefully
+    }
+  }
+
+  Future<String?> getRefreshToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('refresh_token');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> setRefreshToken(String token) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('refresh_token', token);
+    } catch (e) {
+      // Handle storage error gracefully
+    }
+  }
+
+  Future<void> setTokenExpiry(int expiryTimeStamp) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('token_expiry', expiryTimeStamp);
+    } catch (e) {
+      // Handle storage error gracefully
+    }
+  }
+
+  Future<int?> getTokenExpiry() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getInt('token_expiry');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<bool> isTokenExpiringSoon() async {
+    try {
+      final expiry = await getTokenExpiry();
+      if (expiry == null) return true;
+      
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      // Consider token expiring soon if less than 2 minutes remaining
+      const buffer = 120; // 2 minutes in seconds
+      
+      return (expiry - now) <= buffer;
+    } catch (e) {
+      return true; // Assume expired on error
     }
   }
 
@@ -142,27 +208,24 @@ class ApiService {
     }
 
     try {
-      final token = await getAuthToken();
-      final url = Uri.parse('$baseUrl$endpoint');
-      final headers = _getHeaders(token);
+      final data = await _makeRequestWithRetry(() async {
+        final token = await getAuthToken();
+        final url = Uri.parse('$baseUrl$endpoint');
+        final headers = _getHeaders(token);
 
-      // Smart logging - minimal by default, verbose only when needed
-      if (kDebugMode && _enableVerboseLogging) {
-        print('--- 🚀 [API Request] ${url.path} ---');
-        print('Headers: $headers');
-      }
+        // Smart logging - minimal by default, verbose only when needed
+        if (kDebugMode && _enableVerboseLogging) {
+          print('--- 🚀 [API Request] ${url.path} ---');
+          print('Headers: $headers');
+        }
 
-      final response = await _client!
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 30));
-
-      // Smart response logging
-      _logResponse(response);
-
-      final data = _handleResponse(response);
+        return await _client!
+            .get(url, headers: headers)
+            .timeout(const Duration(seconds: 30));
+      });
 
       // Cache successful responses
-      if (useCache && response.statusCode == 200) {
+      if (useCache) {
         _setCache(cacheKey, data);
       }
 
@@ -190,30 +253,23 @@ class ApiService {
     Map<String, dynamic> data,
   ) async {
     try {
-      final token = await getAuthToken();
-      final url = Uri.parse('$baseUrl$endpoint');
-      final headers = _getHeaders(token);
-      final body = jsonEncode(data);
+      return await _makeRequestWithRetry(() async {
+        final token = await getAuthToken();
+        final url = Uri.parse('$baseUrl$endpoint');
+        final headers = _getHeaders(token);
+        final body = jsonEncode(data);
 
-      if (kDebugMode) {
-        print('--- 📤 [API POST Request] 📤 ---');
-        print('URL: $url');
-        print('Headers: $headers');
-        print('Body: $body');
-      }
+        if (kDebugMode) {
+          print('--- 📤 [API POST Request] 📤 ---');
+          print('URL: $url');
+          print('Headers: $headers');
+          print('Body: $body');
+        }
 
-      final response = await _client!
-          .post(url, headers: headers, body: body)
-          .timeout(const Duration(seconds: 30));
-
-      if (kDebugMode) {
-        print('--- 📥 [API POST Response] 📥 ---');
-        print('Status Code: ${response.statusCode}');
-        print('Body: ${response.body}');
-        print('--------------------------');
-      }
-
-      return _handleResponse(response);
+        return await _client!
+            .post(url, headers: headers, body: body)
+            .timeout(const Duration(seconds: 30));
+      });
     } on SocketException {
       throw Exception('Tidak ada koneksi internet');
     } on HttpException {
@@ -249,8 +305,43 @@ class ApiService {
         final accessToken = data['data']['accessToken'];
         if (accessToken != null) {
           await setAuthToken(accessToken);
+          
+          // Also store refresh token if available
+          final refreshToken = data['data']['refreshToken'];
+          if (refreshToken != null) {
+            await setRefreshToken(refreshToken);
+          }
+          
+          // Store token expiry if available (backend should provide expiresIn in seconds)
+          // Handle both String and int types from backend
+          final expiresInRaw = data['data']['expiresIn'];
+          int? expiresIn;
+          
+          if (expiresInRaw != null) {
+            if (expiresInRaw is int) {
+              expiresIn = expiresInRaw;
+            } else if (expiresInRaw is String) {
+              expiresIn = int.tryParse(expiresInRaw);
+            }
+          }
+          
+          if (expiresIn != null) {
+            final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
+            await setTokenExpiry(expiryTime);
+            if (kDebugMode) {
+              print('✅ Token expiry set for: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn: $expiresIn seconds)');
+            }
+          } else {
+            // Default to 15 minutes if not provided (backend default)
+            final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
+            await setTokenExpiry(expiryTime);
+            if (kDebugMode) {
+              print('⚠️ Using default 15min expiry: ${DateTime.fromMillisecondsSinceEpoch(expiryTime * 1000)} (expiresIn was: $expiresInRaw)');
+            }
+          }
+          
           if (kDebugMode) {
-            print('✅ Token saved successfully');
+            print('✅ Tokens and expiry saved successfully');
           }
         } else {
           if (kDebugMode) {
@@ -393,7 +484,8 @@ class ApiService {
       case 400:
         throw Exception(responseData['message'] ?? 'Permintaan tidak valid');
       case 401:
-        throw Exception('Sesi telah berakhir, silakan login kembali');
+        // Don't immediately throw - let the caller handle token refresh
+        throw TokenExpiredException(responseData['message'] ?? 'Token expired');
       case 403:
         throw Exception('Akses ditolak');
       case 404:
@@ -402,6 +494,136 @@ class ApiService {
         throw Exception('Terjadi kesalahan pada server');
       default:
         throw Exception('Terjadi kesalahan tidak terduga');
+    }
+  }
+
+  // Refresh token method
+  Future<bool> refreshToken() async {
+    if (_isRefreshing) {
+      // Wait for ongoing refresh to complete
+      await _waitForRefresh();
+      return true;
+    }
+
+    _isRefreshing = true;
+    
+    try {
+      final refreshToken = await getRefreshToken();
+      if (refreshToken == null) {
+        if (kDebugMode) {
+          print('❌ No refresh token available');
+        }
+        return false;
+      }
+
+      final url = Uri.parse('$baseUrl/api/auth/refresh');
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $refreshToken',
+      };
+
+      if (kDebugMode) {
+        print('🔄 Attempting token refresh...');
+      }
+
+      final response = await _client!
+          .post(url, headers: headers)
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (data['success'] == true) {
+          final newAccessToken = data['data']['accessToken'];
+          final newRefreshToken = data['data']['refreshToken'];
+          
+          if (newAccessToken != null) {
+            await setAuthToken(newAccessToken);
+            if (newRefreshToken != null) {
+              await setRefreshToken(newRefreshToken);
+            }
+            
+            // Update token expiry
+            // Handle both String and int types from backend
+            final expiresInRaw = data['data']['expiresIn'];
+            int? expiresIn;
+            
+            if (expiresInRaw != null) {
+              if (expiresInRaw is int) {
+                expiresIn = expiresInRaw;
+              } else if (expiresInRaw is String) {
+                expiresIn = int.tryParse(expiresInRaw);
+              }
+            }
+            
+            if (expiresIn != null) {
+              final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + expiresIn;
+              await setTokenExpiry(expiryTime);
+            } else {
+              // Default to 15 minutes if not provided
+              final expiryTime = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + (15 * 60);
+              await setTokenExpiry(expiryTime);
+            }
+            
+            if (kDebugMode) {
+              print('✅ Token refresh successful');
+            }
+            
+            // Process queued requests
+            _processRefreshQueue();
+            return true;
+          }
+        }
+      }
+      
+      if (kDebugMode) {
+        print('❌ Token refresh failed: ${response.statusCode}');
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Token refresh error: $e');
+      }
+      return false;
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  Future<void> _waitForRefresh() async {
+    while (_isRefreshing) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
+  void _processRefreshQueue() {
+    for (final callback in _refreshQueue) {
+      callback();
+    }
+    _refreshQueue.clear();
+  }
+
+  // Enhanced request methods with automatic token refresh
+  Future<Map<String, dynamic>> _makeRequestWithRetry(
+    Future<http.Response> Function() request,
+  ) async {
+    try {
+      final response = await request();
+      return _handleResponse(response);
+    } on TokenExpiredException {
+      if (kDebugMode) {
+        print('🔄 Token expired, attempting refresh...');
+      }
+      
+      final refreshSuccess = await refreshToken();
+      if (refreshSuccess) {
+        // Retry the original request with new token
+        final response = await request();
+        return _handleResponse(response);
+      } else {
+        // Refresh failed, user needs to login again
+        throw Exception('Sesi telah berakhir, silakan login kembali');
+      }
     }
   }
 
