@@ -58,9 +58,14 @@ export class AuthController {
         userNim: loginResult.user?.nim,
       });
 
-      // Set refresh token as httpOnly cookie for enhanced security
+      // Set refresh token as httpOnly cookie for web clients
       const cookieOptions = getSecureCookieOptions();
       res.cookie('refreshToken', loginResult.refreshToken, cookieOptions);
+      
+      // For mobile apps, we need to provide refresh token in response body
+      // as they can't access httpOnly cookies
+      const userAgent = req.get('User-Agent') || '';
+      const isMobileApp = !userAgent.includes('Mozilla') && !userAgent.includes('Chrome');
       
       // Return access token in response body (client will store this)
       res.status(200).json({
@@ -69,8 +74,9 @@ export class AuthController {
         data: {
           accessToken: loginResult.accessToken,
           user: loginResult.user,
-          // Don't include refresh token in response body for security
-          expiresIn: "15m" // Access token expiry
+          // Include refresh token for mobile apps, exclude for web browsers
+          ...(isMobileApp && { refreshToken: loginResult.refreshToken }),
+          expiresIn: 900 // Access token expiry in seconds (15 minutes)
         },
       } as ApiResponse);
     } catch (error) {
@@ -191,9 +197,13 @@ export class AuthController {
 
       console.log("🔄 TOKEN REFRESH - New tokens generated successfully");
 
-      // Set new refresh token as httpOnly cookie
+      // Set new refresh token as httpOnly cookie for web clients
       const cookieOptions = getSecureCookieOptions();
       res.cookie('refreshToken', newTokens.refreshToken, cookieOptions);
+      
+      // Check if this is a mobile app request
+      const userAgent = req.get('User-Agent') || '';
+      const isMobileApp = !userAgent.includes('Mozilla') && !userAgent.includes('Chrome');
       
       // Return new access token
       res.status(200).json({
@@ -201,7 +211,9 @@ export class AuthController {
         message: "Tokens refreshed successfully",
         data: {
           accessToken: newTokens.accessToken,
-          expiresIn: "15m"
+          // Include refresh token for mobile apps
+          ...(isMobileApp && { refreshToken: newTokens.refreshToken }),
+          expiresIn: 900 // Access token expiry in seconds (15 minutes)
         },
       } as ApiResponse);
       

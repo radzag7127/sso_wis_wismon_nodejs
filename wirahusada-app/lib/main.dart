@@ -4,13 +4,13 @@ import 'package:flutter/services.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/di/injection_container.dart' as di;
+import 'core/widgets/optimized_bloc_builder.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_navigation_page.dart';
 import 'features/payment/presentation/bloc/payment_bloc.dart';
-import 'features/payment/presentation/bloc/payment_event.dart';
 import 'features/dashboard/presentation/bloc/beranda_bloc.dart';
 import 'features/dashboard/presentation/bloc/beranda_event.dart';
 import 'core/services/api_service.dart';
@@ -152,20 +152,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _preloadCriticalData() {
-    // Preload data that all pages need after the first frame
+    // Defer non-critical data loading to prevent blocking main thread during startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        // Preload payment summary for dashboard
-        final paymentBloc = di.sl<PaymentBloc>();
-        paymentBloc.add(const LoadPaymentSummaryEvent());
-
-        // Preload beranda data
-        final berandaBloc = di.sl<BerandaBloc>();
-        berandaBloc.add(const FetchBerandaDataEvent());
-      } catch (e) {
-        // Handle any initialization errors gracefully
-        debugPrint('Error preloading data: $e');
-      }
+      // Use a slight delay to ensure UI is fully rendered before starting data loading
+      Future.delayed(const Duration(milliseconds: 100), () {
+        try {
+          // Only preload critical data that's immediately visible
+          // Payment summary will be loaded on-demand when dashboard is accessed
+          final berandaBloc = di.sl<BerandaBloc>();
+          berandaBloc.add(const FetchBerandaDataEvent());
+        } catch (e) {
+          // Handle any initialization errors gracefully
+          debugPrint('Error preloading critical data: $e');
+        }
+      });
     });
   }
 
@@ -235,11 +235,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       providers: [
         BlocProvider(
           create: (_) => di.sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
-          lazy: false, // Load immediately for auth
+          lazy: false, // Load immediately for auth - critical for app flow
         ),
         BlocProvider(
           create: (_) => di.sl<PaymentBloc>(),
-          lazy: false, // Keep non-lazy for shared usage across pages
+          lazy: true, // Use lazy loading to defer initialization until actually needed
         ),
       ],
       child: MaterialApp(
@@ -301,7 +301,8 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
+    return OptimizedBlocBuilder<AuthBloc, AuthState>(
+      debugName: 'AuthWrapper',
       buildWhen: (previous, current) {
         // Only rebuild when auth state actually changes
         return previous.runtimeType != current.runtimeType;
@@ -324,34 +325,36 @@ class LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      body: RepaintBoundary(
-        child: Center(
+    return RepaintBoundary(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFAFAFA),
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // App Logo with Hero animation
-              Hero(
-                tag: 'app_logo',
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF135EA2),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x20135EA2),
-                        blurRadius: 20,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.school,
-                    color: Colors.white,
-                    size: 40,
+              RepaintBoundary(
+                child: Hero(
+                  tag: 'app_logo',
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF135EA2),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x20135EA2),
+                          blurRadius: 20,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.school,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                 ),
               ),
@@ -379,12 +382,14 @@ class LoadingScreen extends StatelessWidget {
               const SizedBox(height: 32),
 
               // Loading indicator with animation
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF135EA2)),
-                  strokeWidth: 2.5,
+              RepaintBoundary(
+                child: const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF135EA2)),
+                    strokeWidth: 2.5,
+                  ),
                 ),
               ),
             ],

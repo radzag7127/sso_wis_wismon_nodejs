@@ -14,6 +14,9 @@ import 'package:flutter/foundation.dart';
 // --- PERUBAHAN: Import entitas Course agar bisa digunakan di fungsi baru ---
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 
+// Import performance utilities for async JSON decoding
+import '../utils/performance_utils.dart';
+
 // Custom exception for token expiration
 class TokenExpiredException implements Exception {
   final String message;
@@ -410,7 +413,7 @@ class ApiService {
           .get(uri, headers: _getHeaders(token))
           .timeout(const Duration(seconds: 30));
 
-      final data = _handleResponse(response);
+      final data = await _handleResponse(response);
 
       if (data['success']) {
         final List<dynamic> historyData = data['data']['data'];
@@ -480,8 +483,9 @@ class ApiService {
     }
   }
 
-  Map<String, dynamic> _handleResponse(http.Response response) {
-    final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+  Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
+    // Use performance-optimized JSON decoding for large responses
+    final responseData = await PerformanceUtils.decodeJsonAsync(response.body);
 
     switch (response.statusCode) {
       case 200:
@@ -490,8 +494,16 @@ class ApiService {
       case 400:
         throw Exception(responseData['message'] ?? 'Permintaan tidak valid');
       case 401:
+        // Check error type for more specific handling
+        final errorType = responseData['errorType'] ?? 'token_expired';
+        final message = responseData['message'] ?? 'Authentication failed';
+        
+        if (kDebugMode) {
+          print('🔒 Auth error type: $errorType, message: $message');
+        }
+        
         // Don't immediately throw - let the caller handle token refresh
-        throw TokenExpiredException(responseData['message'] ?? 'Token expired');
+        throw TokenExpiredException(message);
       case 403:
         throw Exception('Akses ditolak');
       case 404:
@@ -526,27 +538,38 @@ class ApiService {
       final headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': 'Bearer $refreshToken',
       };
+      
+      // Send refresh token in request body for mobile apps
+      final body = jsonEncode({
+        'refreshToken': refreshToken,
+      });
 
       if (kDebugMode) {
         print('🔄 Attempting token refresh...');
       }
 
       final response = await _client!
-          .post(url, headers: headers)
+          .post(url, headers: headers, body: body)
           .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = await PerformanceUtils.decodeJsonAsync(response.body);
         if (data['success'] == true) {
           final newAccessToken = data['data']['accessToken'];
           final newRefreshToken = data['data']['refreshToken'];
 
           if (newAccessToken != null) {
             await setAuthToken(newAccessToken);
+            
+            // Always update refresh token if provided by backend
             if (newRefreshToken != null) {
               await setRefreshToken(newRefreshToken);
+              if (kDebugMode) {
+                print('✅ New refresh token stored');
+              }
+            } else if (kDebugMode) {
+              print('⚠️ No new refresh token provided by backend');
             }
 
             // Update token expiry
@@ -617,7 +640,7 @@ class ApiService {
   ) async {
     try {
       final response = await request();
-      return _handleResponse(response);
+      return await _handleResponse(response);
     } on TokenExpiredException {
       if (kDebugMode) {
         print('🔄 Token expired, attempting refresh...');
@@ -627,7 +650,7 @@ class ApiService {
       if (refreshSuccess) {
         // Retry the original request with new token
         final response = await request();
-        return _handleResponse(response);
+        return await _handleResponse(response);
       } else {
         // Refresh failed, user needs to login again
         throw Exception('Sesi telah berakhir, silakan login kembali');

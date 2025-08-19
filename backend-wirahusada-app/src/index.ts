@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import { testConnections, closeDatabaseConnections, getDatabaseHealth } from "./config/database";
 import { databaseMigration } from "./utils/migrations";
@@ -50,6 +51,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+app.use(cookieParser()); // Enable cookie parsing for httpOnly refresh tokens
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 

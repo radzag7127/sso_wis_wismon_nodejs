@@ -16,99 +16,101 @@ class TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFFAFAFA),
-      borderRadius: BorderRadius.circular(8),
-      elevation: 2,
-      shadowColor: const Color(0x0C000000),
-      child: InkWell(
-        onTap: onTap,
+    return RepaintBoundary(
+      child: Material(
+        color: const Color(0xFFFAFAFA),
         borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.type,
-                      style: const TextStyle(
-                        color: Color(0xFF121315),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.16,
+        elevation: 2,
+        shadowColor: const Color(0x0C000000),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.type,
+                        style: const TextStyle(
+                          color: Color(0xFF121315),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.16,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Transaction ID Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFA5DCFF),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            item.txId,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Color(0xFF323335),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              height: 1.78,
-                              letterSpacing: 1,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // Transaction ID Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFA5DCFF),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.txId,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFF323335),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                height: 1.78,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Amount
-                        Text(
-                          _currencyFormat.format(item.jumlah),
-                          style: const TextStyle(
-                            color: Color(0xFF858586),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: -0.12,
+                          const SizedBox(width: 8),
+                          // Amount
+                          Text(
+                            _currencyFormat.format(item.jumlah),
+                            style: const TextStyle(
+                              color: Color(0xFF858586),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: -0.12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Date
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _formatDate(item.tanggal),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Color(0xFF858586),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.09,
+                      ),
+                    ),
+                    Text(
+                      _formatYear(item.tanggal),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Color(0xFF858586),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.09,
+                      ),
                     ),
                   ],
                 ),
-              ),
-              // Date
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatDate(item.tanggal),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF858586),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.09,
-                    ),
-                  ),
-                  Text(
-                    _formatYear(item.tanggal),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF858586),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.09,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

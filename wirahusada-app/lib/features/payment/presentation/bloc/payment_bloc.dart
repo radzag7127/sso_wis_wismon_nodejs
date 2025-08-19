@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/usecases/usecase.dart';
+import '../../../../core/utils/performance_utils.dart';
 import '../../domain/entities/payment.dart';
 import '../../domain/usecases/get_payment_history_usecase.dart';
 import '../../domain/usecases/get_payment_summary_usecase.dart';
@@ -39,34 +40,68 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
       emit(const PaymentLoading());
     }
 
-    final result = await getPaymentHistoryUseCase(
-      PaymentHistoryParams(page: event.page, limit: event.limit),
-    );
+    try {
+      // Execute payment history and summary requests in parallel for better performance
+      final parallelResults = await PerformanceUtils.executeParallel<dynamic>(
+        futures: {
+          'history': () => getPaymentHistoryUseCase(
+            PaymentHistoryParams(page: event.page, limit: event.limit),
+          ),
+          'summary': () => getPaymentSummaryUseCase(NoParams()),
+        },
+        timeout: const Duration(seconds: 30),
+      );
 
-    await result.fold(
-      (failure) async =>
-          emit(PaymentError(message: _mapFailureToMessage(failure))),
-      (newHistoryItems) async {
-        final summaryResult = await getPaymentSummaryUseCase(NoParams());
-        await summaryResult.fold(
-          (summaryFailure) async => emit(
-            PaymentHistoryLoaded(
-              historyItems: event.page == 1
-                  ? newHistoryItems
-                  : (currentHistory + newHistoryItems),
+      if (parallelResults['hasErrors']) {
+        // Handle case where history succeeds but summary fails
+        final historyResult = parallelResults['results']['history'];
+        final summaryError = parallelResults['errors']['summary'];
+        
+        if (historyResult != null) {
+          await historyResult.fold(
+            (failure) async => emit(PaymentError(message: _mapFailureToMessage(failure))),
+            (newHistoryItems) async => emit(
+              PaymentHistoryLoaded(
+                historyItems: event.page == 1
+                    ? newHistoryItems
+                    : (currentHistory + newHistoryItems),
+              ),
             ),
-          ),
-          (summary) async => emit(
-            PaymentHistoryLoaded(
-              historyItems: event.page == 1
-                  ? newHistoryItems
-                  : (currentHistory + newHistoryItems),
-              summary: summary,
-            ),
-          ),
+          );
+        } else {
+          emit(PaymentError(message: 'Failed to load payment data: $summaryError'));
+        }
+      } else {
+        // Both requests successful
+        final historyResult = parallelResults['results']['history'];
+        final summaryResult = parallelResults['results']['summary'];
+
+        await historyResult.fold(
+          (failure) async => emit(PaymentError(message: _mapFailureToMessage(failure))),
+          (newHistoryItems) async {
+            await summaryResult.fold(
+              (summaryFailure) async => emit(
+                PaymentHistoryLoaded(
+                  historyItems: event.page == 1
+                      ? newHistoryItems
+                      : (currentHistory + newHistoryItems),
+                ),
+              ),
+              (summary) async => emit(
+                PaymentHistoryLoaded(
+                  historyItems: event.page == 1
+                      ? newHistoryItems
+                      : (currentHistory + newHistoryItems),
+                  summary: summary,
+                ),
+              ),
+            );
+          },
         );
-      },
-    );
+      }
+    } catch (e) {
+      emit(PaymentError(message: 'Failed to load payment data: ${e.toString()}'));
+    }
   }
 
   Future<void> _loadSummaryWithHistory(

@@ -51,3 +51,4 @@ temp/
 
 .env.example
 SECURITY_IMPROVEMENTS.md
+AUTHENTICATION_FIXES.md

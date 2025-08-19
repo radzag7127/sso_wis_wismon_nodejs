@@ -47,7 +47,7 @@ const JWT_SECRET = validateJwtSecret();
 const JWT_REFRESH_SECRET = validateRefreshSecret();
 
 // Token expiration constants
-const ACCESS_TOKEN_EXPIRY = "15m"; // 15 minutes
+const ACCESS_TOKEN_EXPIRY = "15m"; // 15 minutes (security best practice)
 const REFRESH_TOKEN_EXPIRY = "7d"; // 7 days
 
 export interface JWTPayload {
@@ -220,12 +220,27 @@ export const authenticateToken = (
       } - User-Agent: ${req.get("user-agent")}`
     );
 
-    const statusCode = errorMessage.includes("expired") ? 401 : 403;
+    // Provide more specific status codes and error types
+    let statusCode = 401;
+    let errorType = "authentication_failed";
+
+    if (errorMessage.includes("expired")) {
+      statusCode = 401;
+      errorType = "token_expired";
+    } else if (errorMessage.includes("Invalid")) {
+      statusCode = 403;
+      errorType = "token_invalid";
+    } else if (errorMessage.includes("required")) {
+      statusCode = 401;
+      errorType = "token_missing";
+    }
 
     res.status(statusCode).json({
       success: false,
       message: errorMessage,
+      errorType: errorType,
       errors: [errorMessage],
+      timestamp: new Date().toISOString(),
     });
   }
 };
@@ -268,10 +283,23 @@ export const authenticateRefreshToken = (
       `🔒 Refresh token validation failed: ${errorMessage} - IP: ${req.ip}`
     );
 
+    // Provide specific error types for refresh token failures
+    let errorType = "refresh_token_failed";
+    
+    if (errorMessage.includes("expired")) {
+      errorType = "refresh_token_expired";
+    } else if (errorMessage.includes("Invalid")) {
+      errorType = "refresh_token_invalid";
+    } else if (errorMessage.includes("required")) {
+      errorType = "refresh_token_missing";
+    }
+
     res.status(401).json({
       success: false,
       message: errorMessage,
+      errorType: errorType,
       errors: [errorMessage],
+      timestamp: new Date().toISOString(),
     });
   }
 };
