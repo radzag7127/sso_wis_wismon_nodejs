@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/data/models/user_model.dart';
@@ -27,11 +28,16 @@ class TokenExpiredException implements Exception {
 }
 
 class ApiService {
-  // API Base URL
-  // For Chrome/Web development: http://localhost:3000
-  // For Android emulator: http://10.0.2.2:3000
-  // For iOS simulator: http://localhost:3000
-  static const String baseUrl = 'http://10.0.2.2:3000';
+  // Platform-specific API Base URL
+  static String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:3000'; // Chrome/Web development
+    } else if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3000'; // Android emulator
+    } else {
+      return 'http://localhost:3000'; // iOS simulator
+    }
+  }
   static http.Client? _client;
   static final Map<String, dynamic> _cache = {};
   static const int _cacheTimeout = 5 * 60 * 1000; // 5 min
