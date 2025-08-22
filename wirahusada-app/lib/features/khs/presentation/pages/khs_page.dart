@@ -53,12 +53,16 @@ class _KhsViewState extends State<KhsView> {
 
   void _fetchData() {
     if (_selectedSemester == null) return;
+    // Reset data sebelumnya agar tidak tampil saat data baru belum ada
+    setState(() {
+      _lastLoadedKhs = null;
+    });
     context.read<KhsBloc>().add(
-      FetchKhsData(
-        semesterKe: _selectedSemester!,
-        jenisSemester: _getJenisSemesterCode(),
-      ),
-    );
+          FetchKhsData(
+            semesterKe: _selectedSemester!,
+            jenisSemester: _getJenisSemesterCode(),
+          ),
+        );
   }
 
   Future<void> _fetchLatestSemester() async {
@@ -68,6 +72,8 @@ class _KhsViewState extends State<KhsView> {
       if (mounted && response['success'] == true) {
         setState(() {
           _latestSemesterForStudent = response['data']['semester'] ?? 1;
+          // --- PERUBAHAN DI SINI ---
+          // Mengatur semester yang dipilih menjadi 1 (semester awal).
           _selectedSemester = 1;
           _isLoadingSemester = false;
         });
@@ -89,7 +95,6 @@ class _KhsViewState extends State<KhsView> {
     if (_selectedSemester == newSemester) return;
     setState(() {
       _selectedSemester = newSemester;
-      _lastLoadedKhs = null;
     });
     _fetchData();
   }
@@ -98,7 +103,6 @@ class _KhsViewState extends State<KhsView> {
     if (_selectedType == newType) return;
     setState(() {
       _selectedType = newType;
-      _lastLoadedKhs = null;
     });
     _fetchData();
   }
@@ -190,11 +194,16 @@ class _KhsViewState extends State<KhsView> {
             listener: (context, state) {
               if (state is KhsLoaded) {
                 setState(() => _lastLoadedKhs = state.khs);
+              } else if (state is KhsError) {
+                // Saat error, pastikan data lama dibersihkan
+                setState(() {
+                  _lastLoadedKhs = null;
+                });
               }
             },
             child: BlocBuilder<KhsBloc, KhsState>(
               builder: (context, state) {
-                if (state is KhsLoading && _lastLoadedKhs == null) {
+                if (state is KhsLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (state is KhsError) {
@@ -202,28 +211,18 @@ class _KhsViewState extends State<KhsView> {
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
                       child: Text(
-                        'Gagal memuat data KHS: ${state.message}',
+                        state.message,
                         textAlign: TextAlign.center,
                       ),
                     ),
                   );
                 }
-                if (_lastLoadedKhs != null) {
-                  return Stack(
-                    children: [
-                      _buildKhsContent(context, _lastLoadedKhs!),
-                      if (state is KhsLoading)
-                        Container(
-                          color: Colors.black.withOpacity(0.1),
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        ),
-                    ],
-                  );
+                if (state is KhsLoaded && state.khs.mataKuliah.isNotEmpty) {
+                   return _buildKhsContent(context, state.khs);
                 }
+                // Tampilan jika tidak ada data atau setelah error
                 return const Center(
-                  child: Text("Pilih semester untuk melihat KHS."),
+                  child: Text("Tidak ada data KHS untuk semester ini."),
                 );
               },
             ),
@@ -234,9 +233,7 @@ class _KhsViewState extends State<KhsView> {
   }
 
   Widget? _buildBottomNavigator() {
-    if (!_isLoadingSemester &&
-        _lastLoadedKhs != null &&
-        _selectedSemester != null) {
+    if (!_isLoadingSemester && _selectedSemester != null) {
       return _SemesterNavigator(
         currentSemester: _selectedSemester!,
         maxSemester: _latestSemesterForStudent,
@@ -254,7 +251,6 @@ class _KhsViewState extends State<KhsView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // PERUBAHAN: Posisi ditukar
           _SemesterFilter(
             latestSemester: _latestSemesterForStudent,
             selectedSemester: _selectedSemester,
@@ -278,12 +274,7 @@ class _KhsViewState extends State<KhsView> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 24),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              children: [
-                _RekapitulasiCard(rekap: khs.rekapitulasi),
-                const SizedBox(height: 24),
-              ],
-            ),
+            child: _RekapitulasiCard(rekap: khs.rekapitulasi),
           ),
         ),
         _MataKuliahSliverList(courses: khs.mataKuliah),
@@ -455,6 +446,7 @@ class _SemesterNavigator extends StatelessWidget {
   final int currentSemester;
   final int maxSemester;
   final Function(int) onNavigate;
+
   const _SemesterNavigator({
     required this.currentSemester,
     required this.maxSemester,
@@ -465,47 +457,92 @@ class _SemesterNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool canGoBack = currentSemester > 1;
     final bool canGoForward = currentSemester < maxSemester;
+
     if (maxSemester <= 1) {
       return const SizedBox.shrink();
     }
+
     return Container(
       height: 60,
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            iconSize: 32,
-            onPressed: canGoBack ? () => onNavigate(currentSemester - 1) : null,
-            color: canGoBack
-                ? Theme.of(context).primaryColor
-                : Colors.grey.withOpacity(0.5),
+          _buildNavButton(
+            context: context,
+            icon: Icons.chevron_left,
+            text: 'Sebelumnya',
+            isEnabled: canGoBack,
+            onPressed: () => onNavigate(currentSemester - 1),
+            isPrefix: true,
           ),
           Text(
             'Semester $currentSemester',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            iconSize: 32,
-            onPressed: canGoForward
-                ? () => onNavigate(currentSemester + 1)
-                : null,
-            color: canGoForward
-                ? Theme.of(context).primaryColor
-                : Colors.grey.withOpacity(0.5),
+          _buildNavButton(
+            context: context,
+            icon: Icons.chevron_right,
+            text: 'Berikutnya',
+            isEnabled: canGoForward,
+            onPressed: () => onNavigate(currentSemester + 1),
+            isPrefix: false,
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavButton({
+    required BuildContext context,
+    required IconData icon,
+    required String text,
+    required bool isEnabled,
+    required VoidCallback onPressed,
+    bool isPrefix = false,
+  }) {
+    final color = isEnabled ? Theme.of(context).primaryColor : Colors.grey.withOpacity(0.5);
+    return TextButton(
+      onPressed: isEnabled ? onPressed : null,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Row(
+        children: [
+          if (isPrefix) Icon(icon, color: color),
+          if (isPrefix) const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          if (!isPrefix) const SizedBox(width: 4),
+          if (!isPrefix) Icon(icon, color: color),
         ],
       ),
     );
   }
 }
 
+
 class _RekapitulasiCard extends StatelessWidget {
   final Rekapitulasi rekap;
   const _RekapitulasiCard({required this.rekap});
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -554,6 +591,7 @@ class _RekapItem extends StatelessWidget {
   final String title;
   final String value;
   const _RekapItem({required this.title, required this.value});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -598,13 +636,8 @@ class _MataKuliahSliverList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (courses.isEmpty) {
-      return const SliverPadding(
-        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 48.0),
-        sliver: SliverToBoxAdapter(
-          child: Center(
-            child: Text("Tidak ada data mata kuliah untuk semester ini."),
-          ),
-        ),
+      return const SliverToBoxAdapter(
+        child: SizedBox.shrink(), // Don't show anything if no courses
       );
     }
 
@@ -625,12 +658,13 @@ class _MataKuliahSliverList extends StatelessWidget {
 class _MataKuliahTile extends StatelessWidget {
   final KhsCourse course;
   const _MataKuliahTile({required this.course});
+
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
       color: Colors.white,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: Colors.grey[300]!),
         borderRadius: BorderRadius.circular(12),
@@ -651,8 +685,8 @@ class _MataKuliahTile extends StatelessWidget {
                 child: Text(
                   course.nilai,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
             ),

@@ -53,12 +53,16 @@ class _KrsViewState extends State<KrsView> {
 
   void _fetchData() {
     if (_selectedSemester == null) return;
+    // Reset data sebelumnya agar tidak tampil saat data baru belum ada
+    setState(() {
+      _lastLoadedKrs = null;
+    });
     context.read<KrsBloc>().add(
-      FetchKrsData(
-        semesterKe: _selectedSemester!,
-        jenisSemester: _getJenisSemesterCode(),
-      ),
-    );
+          FetchKrsData(
+            semesterKe: _selectedSemester!,
+            jenisSemester: _getJenisSemesterCode(),
+          ),
+        );
   }
 
   Future<void> _fetchLatestSemester() async {
@@ -68,6 +72,7 @@ class _KrsViewState extends State<KrsView> {
       if (mounted && response['success'] == true) {
         setState(() {
           _latestSemesterForStudent = response['data']['semester'] ?? 1;
+          // Mengatur semester yang dipilih menjadi 1 (semester awal).
           _selectedSemester = 1;
           _isLoadingSemester = false;
         });
@@ -89,7 +94,6 @@ class _KrsViewState extends State<KrsView> {
     if (_selectedSemester == newSemester) return;
     setState(() {
       _selectedSemester = newSemester;
-      _lastLoadedKrs = null;
     });
     _fetchData();
   }
@@ -98,7 +102,6 @@ class _KrsViewState extends State<KrsView> {
     if (_selectedType == newType) return;
     setState(() {
       _selectedType = newType;
-      _lastLoadedKrs = null;
     });
     _fetchData();
   }
@@ -190,11 +193,16 @@ class _KrsViewState extends State<KrsView> {
             listener: (context, state) {
               if (state is KrsLoaded) {
                 setState(() => _lastLoadedKrs = state.krs);
+              } else if (state is KrsError) {
+                // Saat error, pastikan data lama dibersihkan
+                setState(() {
+                  _lastLoadedKrs = null;
+                });
               }
             },
             child: BlocBuilder<KrsBloc, KrsState>(
               builder: (context, state) {
-                if (state is KrsLoading && _lastLoadedKrs == null) {
+                if (state is KrsLoading) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (state is KrsError) {
@@ -202,28 +210,18 @@ class _KrsViewState extends State<KrsView> {
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
                       child: Text(
-                        'Gagal memuat data KRS: ${state.message}',
+                        state.message,
                         textAlign: TextAlign.center,
                       ),
                     ),
                   );
                 }
-                if (_lastLoadedKrs != null) {
-                  return Stack(
-                    children: [
-                      _buildKrsContent(context, _lastLoadedKrs!),
-                      if (state is KrsLoading)
-                        Container(
-                          color: Colors.black.withOpacity(0.1),
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        ),
-                    ],
-                  );
+                if (state is KrsLoaded && state.krs.mataKuliah.isNotEmpty) {
+                   return _buildKrsContent(context, state.krs);
                 }
+                // Tampilan jika tidak ada data atau setelah error
                 return const Center(
-                  child: Text("Pilih semester untuk melihat KRS."),
+                  child: Text("Tidak ada data KRS untuk semester ini."),
                 );
               },
             ),
@@ -234,9 +232,7 @@ class _KrsViewState extends State<KrsView> {
   }
 
   Widget? _buildBottomNavigator() {
-    if (!_isLoadingSemester &&
-        _lastLoadedKrs != null &&
-        _selectedSemester != null) {
+    if (!_isLoadingSemester && _selectedSemester != null) {
       return _SemesterNavigator(
         currentSemester: _selectedSemester!,
         maxSemester: _latestSemesterForStudent,
@@ -254,7 +250,6 @@ class _KrsViewState extends State<KrsView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // PERUBAHAN: Posisi ditukar
           _SemesterFilter(
             latestSemester: _latestSemesterForStudent,
             selectedSemester: _selectedSemester,
@@ -455,6 +450,7 @@ class _SemesterNavigator extends StatelessWidget {
   final int currentSemester;
   final int maxSemester;
   final Function(int) onNavigate;
+
   const _SemesterNavigator({
     required this.currentSemester,
     required this.maxSemester,
@@ -465,43 +461,87 @@ class _SemesterNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool canGoBack = currentSemester > 1;
     final bool canGoForward = currentSemester < maxSemester;
+
     if (maxSemester <= 1) {
       return const SizedBox.shrink();
     }
+
     return Container(
       height: 60,
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            iconSize: 32,
-            onPressed: canGoBack ? () => onNavigate(currentSemester - 1) : null,
-            color: canGoBack
-                ? Theme.of(context).primaryColor
-                : Colors.grey.withOpacity(0.5),
+          _buildNavButton(
+            context: context,
+            icon: Icons.chevron_left,
+            text: 'Sebelumnya',
+            isEnabled: canGoBack,
+            onPressed: () => onNavigate(currentSemester - 1),
+            isPrefix: true,
           ),
           Text(
             'Semester $currentSemester',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            iconSize: 32,
-            onPressed: canGoForward
-                ? () => onNavigate(currentSemester + 1)
-                : null,
-            color: canGoForward
-                ? Theme.of(context).primaryColor
-                : Colors.grey.withOpacity(0.5),
+          _buildNavButton(
+            context: context,
+            icon: Icons.chevron_right,
+            text: 'Berikutnya',
+            isEnabled: canGoForward,
+            onPressed: () => onNavigate(currentSemester + 1),
+            isPrefix: false,
           ),
         ],
       ),
     );
   }
+
+  Widget _buildNavButton({
+    required BuildContext context,
+    required IconData icon,
+    required String text,
+    required bool isEnabled,
+    required VoidCallback onPressed,
+    bool isPrefix = false,
+  }) {
+    final color = isEnabled ? Theme.of(context).primaryColor : Colors.grey.withOpacity(0.5);
+    return TextButton(
+      onPressed: isEnabled ? onPressed : null,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Row(
+        children: [
+          if (isPrefix) Icon(icon, color: color),
+          if (isPrefix) const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          if (!isPrefix) const SizedBox(width: 4),
+          if (!isPrefix) Icon(icon, color: color),
+        ],
+      ),
+    );
+  }
 }
+
 
 class _KrsHeaderCard extends StatelessWidget {
   final Krs krs;
@@ -522,8 +562,10 @@ class _KrsHeaderCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // --- PERUBAHAN DI SINI ---
+              // Menghapus `(${krs.jenisSemester})` dari Text widget.
               Text(
-                'Semester ${krs.semesterKe} (${krs.jenisSemester})',
+                'Semester ${krs.semesterKe}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -570,29 +612,21 @@ class _MataKuliahSliverList extends StatelessWidget {
       );
     }
 
+    List<Widget> listItems = [
+      const Padding(
+        padding: EdgeInsets.only(bottom: 8.0),
+        child: Text(
+          "Daftar Mata Kuliah",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+      ...courses.map((course) => _MataKuliahTile(course: course)).toList(),
+    ];
+
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       sliver: SliverList(
-        delegate: SliverChildBuilderDelegate((context, index) {
-          if (index == 0) {
-            // Add header before first item
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Daftar Mata Kuliah",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                _MataKuliahTile(course: courses[0]),
-              ],
-            );
-          }
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _MataKuliahTile(course: courses[index]),
-          );
-        }, childCount: courses.length),
+        delegate: SliverChildListDelegate(listItems),
       ),
     );
   }
