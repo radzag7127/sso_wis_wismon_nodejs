@@ -48,7 +48,7 @@ const JWT_REFRESH_SECRET = validateRefreshSecret();
 
 // Token expiration constants
 const ACCESS_TOKEN_EXPIRY = "15m"; // 15 minutes (security best practice)
-const REFRESH_TOKEN_EXPIRY = "7d"; // 7 days
+const REFRESH_TOKEN_EXPIRY = "30d"; // 30 days
 
 export interface JWTPayload {
   nrm: string;
@@ -285,7 +285,7 @@ export const authenticateRefreshToken = (
 
     // Provide specific error types for refresh token failures
     let errorType = "refresh_token_failed";
-    
+
     if (errorMessage.includes("expired")) {
       errorType = "refresh_token_expired";
     } else if (errorMessage.includes("Invalid")) {
@@ -333,7 +333,7 @@ export const getSecureCookieOptions = () => {
     httpOnly: true,
     secure: isProduction, // HTTPS only in production
     sameSite: isProduction ? ("strict" as const) : ("lax" as const),
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days, setiap buka aplikasi diperbarui, remove 7 hari
     path: "/",
   };
 };
