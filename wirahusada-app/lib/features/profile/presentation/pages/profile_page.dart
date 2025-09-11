@@ -214,10 +214,11 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Widget _buildProfileCard(BuildContext context, dynamic user) {
+    
     // Safe access to user properties with fallbacks
     final userName = _safeGetString(user.namam) ?? 'Nama tidak tersedia';
     final birthPlace = _safeGetString(user.tplahir) ?? '';
-    final registrationDate = _safeGetString(user.tgdaftar) ?? '';
+    final registrationDate = _formatDate(_safeGetString(user.tgdaftar)) ?? '';
 
     String locationInfo = '';
     if (birthPlace.isNotEmpty && registrationDate.isNotEmpty) {
@@ -316,7 +317,7 @@ class _ProfilePageState extends State<ProfilePage>
         const SizedBox(height: 8),
         _buildInfoBox(
           'Tanggal Daftar',
-          _safeGetString(user.tgdaftar) ?? 'Belum tersedia',
+          _formatDate(_safeGetString(user.tgdaftar)) ?? 'Belum tersedia',
         ),
       ],
     );
@@ -362,5 +363,19 @@ class _ProfilePageState extends State<ProfilePage>
     if (value == null) return null;
     if (value is String) return value.isEmpty ? null : value;
     return value.toString().isEmpty ? null : value.toString();
+  }
+
+  // Helper method to format date strings
+  String? _formatDate(String? dateString) {
+    if (dateString == null || dateString.isEmpty) return null;
+    
+    try {
+      DateTime dateTime = DateTime.parse(dateString);
+      // Format as DD/MM/YYYY
+      return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
+    } catch (e) {
+      // If parsing fails, return the original string
+      return dateString;
+    }
   }
 }

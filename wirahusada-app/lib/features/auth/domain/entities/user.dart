@@ -8,6 +8,7 @@ class User extends Equatable {
   final String? phone; // Phone (optional)
   final String? tgdaftar; // Registration date
   final String? tplahir; // Birth place
+  final String? kdagama; // Religion code (optional)
 
   const User({
     required this.namam,
@@ -17,8 +18,9 @@ class User extends Equatable {
     this.phone,
     this.tgdaftar,
     this.tplahir,
+    this.kdagama,
   });
 
   @override
-  List<Object?> get props => [namam, nrm, nim, email, phone, tgdaftar, tplahir];
+  List<Object?> get props => [namam, nrm, nim, email, phone, tgdaftar, tplahir, kdagama];
 }

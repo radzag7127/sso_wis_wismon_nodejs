@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/di/injection_container.dart' as di;
 import 'core/widgets/optimized_bloc_builder.dart';
+import 'core/services/auth_navigation_service.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
@@ -245,6 +246,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: MaterialApp(
         title: 'Wismon Keuangan',
         debugShowCheckedModeBanner: false, // Remove debug banner
+        navigatorKey: AuthNavigationService.navigatorKey, // Add global navigator key
         // Performance optimizations
         builder: (context, child) {
           // Prevent text scaling beyond reasonable limits
@@ -301,21 +303,37 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OptimizedBlocBuilder<AuthBloc, AuthState>(
-      debugName: 'AuthWrapper',
-      buildWhen: (previous, current) {
-        // Only rebuild when auth state actually changes
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) {
+        // Listen to all auth state changes for navigation
         return previous.runtimeType != current.runtimeType;
       },
-      builder: (context, state) {
-        if (state is AuthAuthenticated) {
-          return const MainNavigationPage();
-        }
+      listener: (context, state) {
+        // Handle navigation on auth state changes
         if (state is AuthUnauthenticated || state is AuthError) {
-          return const LoginPage();
+          // Clear any existing routes and navigate to login
+          Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        } else if (state is AuthAuthenticated) {
+          // Navigate to main app
+          Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
         }
-        return const LoadingScreen();
       },
+      child: OptimizedBlocBuilder<AuthBloc, AuthState>(
+        debugName: 'AuthWrapper',
+        buildWhen: (previous, current) {
+          // Only rebuild when auth state actually changes
+          return previous.runtimeType != current.runtimeType;
+        },
+        builder: (context, state) {
+          if (state is AuthAuthenticated) {
+            return const MainNavigationPage();
+          }
+          if (state is AuthUnauthenticated || state is AuthError) {
+            return const LoginPage();
+          }
+          return const LoadingScreen();
+        },
+      ),
     );
   }
 }

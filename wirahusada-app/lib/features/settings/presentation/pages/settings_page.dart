@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 import '../widgets/logout_confirmation_dialog.dart';
 import '../widgets/settings_menu_item.dart';
 
@@ -54,34 +55,49 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 20),
-                      _buildAppDescriptionCard(),
-                      const SizedBox(height: 20),
-                      _buildDivider(),
-                      const SizedBox(height: 20),
-                      _buildMenuItems(),
-                    ],
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) {
+        // Only listen when transitioning to unauthenticated from any other state
+        return current is AuthUnauthenticated && 
+               previous is! AuthUnauthenticated &&
+               previous is! AuthInitial;
+      },
+      listener: (context, state) {
+        // When logout is successful, navigate to login
+        if (state is AuthUnauthenticated) {
+          // Use Navigator.pushNamedAndRemoveUntil to ensure clean navigation stack
+          Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBFBFB),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              _buildHeader(),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildAppDescriptionCard(),
+                        const SizedBox(height: 20),
+                        _buildDivider(),
+                        const SizedBox(height: 20),
+                        _buildMenuItems(),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            // Version Info
-            _buildVersionInfo(),
-          ],
+              // Version Info
+              _buildVersionInfo(),
+            ],
+          ),
         ),
       ),
     );

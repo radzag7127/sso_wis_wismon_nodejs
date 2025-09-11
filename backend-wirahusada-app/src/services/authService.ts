@@ -1,17 +1,6 @@
 import { executeSsoQuery, executeWisQuery } from "../config/database";
-import { User, Student, LoginRequest } from "../types";
+import { User, Student, LoginRequest, EnhancedLoginResponse } from "../types";
 import { generateTokenPair, TokenPair } from "../utils/auth";
-
-// Enhanced response interface for dual token system
-export interface EnhancedLoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: {
-    nrm: string;
-    nim: string;
-    namam: string;
-  };
-}
 
 export interface TokenRefreshPayload {
   nrm: string;
@@ -24,7 +13,7 @@ export class AuthService {
   async findStudent(namam_nim: string, nrm: string): Promise<Student | null> {
     try {
       let query = `
-        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
+        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama, telpasal as phone 
         FROM mahasiswa 
         WHERE nim = ? AND nrm = ?
       `;
@@ -35,7 +24,7 @@ export class AuthService {
       }
       // If not found by NIM, try by student name (exact match, case-insensitive)
       query = `
-        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
+        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama, telpasal as phone 
         FROM mahasiswa 
         WHERE LOWER(namam) = LOWER(?) AND nrm = ?
       `;
@@ -49,7 +38,7 @@ export class AuthService {
       // But still exact match after removing spaces
       const namam_nim_no_spaces = namam_nim.replace(/\s+/g, "");
       query = `
-        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
+        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama, telpasal as phone 
         FROM mahasiswa 
         WHERE LOWER(REPLACE(namam, ' ', '')) = LOWER(?) AND nrm = ?
       `;
@@ -136,7 +125,13 @@ export class AuthService {
         nrm: student.nrm,
         nim: student.nim,
         namam: student.namam,
+        tgdaftar: student.tgdaftar,
+        tplahir: student.tplahir,
+        kdagama: student.kdagama,
+        email: student.email,
+        phone: student.phone,
       },
+      expiresIn: "15m", // Access token expiry (15 minutes)
     };
   }
 
@@ -172,7 +167,7 @@ export class AuthService {
   async getStudentProfile(nrm: string): Promise<Student | null> {
     try {
       const query = `
-        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama 
+        SELECT nrm, nim, namam, tgdaftar, tplahir, kdagama, telpasal as phone 
         FROM mahasiswa 
         WHERE nrm = ?
       `;

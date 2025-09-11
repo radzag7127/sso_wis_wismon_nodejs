@@ -9,6 +9,7 @@ class UserModel extends User {
     super.phone,
     super.tgdaftar,
     super.tplahir,
+    super.kdagama,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -20,6 +21,7 @@ class UserModel extends User {
       phone: json['phone'],
       tgdaftar: json['tgdaftar'],
       tplahir: json['tplahir'],
+      kdagama: json['kdagama'],
     );
   }
 
@@ -32,6 +34,7 @@ class UserModel extends User {
       'phone': phone,
       'tgdaftar': tgdaftar,
       'tplahir': tplahir,
+      'kdagama': kdagama,
     };
   }
 }

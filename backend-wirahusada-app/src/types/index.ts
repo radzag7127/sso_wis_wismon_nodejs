@@ -17,9 +17,10 @@ export interface Student {
   nim: string;
   namam: string;
   tgdaftar?: Date;
-  tplahir?: Date;
+  tplahir?: string;  // Place of birth (not date)
   kdagama?: string;
   email?: string;
+  phone?: string;
 }
 
 export interface Employee {
@@ -93,6 +94,11 @@ export interface EnhancedLoginResponse {
     nrm: string;
     nim: string;
     namam: string;
+    tgdaftar?: Date;
+    tplahir?: string;  // Place of birth (not date)
+    kdagama?: string;
+    email?: string;
+    phone?: string;
   };
   expiresIn: string; // Access token expiry (e.g., "15m")
 }

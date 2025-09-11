@@ -10,13 +10,15 @@ import '../../features/payment/data/models/payment_model.dart';
 import '../../features/transkrip/data/models/transkrip_model.dart';
 import '../../features/krs/data/models/krs_model.dart';
 import '../../features/khs/data/models/khs_model.dart';
-import 'package:flutter/foundation.dart';
 
 // --- PERUBAHAN: Import entitas Course agar bisa digunakan di fungsi baru ---
 import 'package:wismon_keuangan/features/transkrip/domain/entities/transkrip.dart';
 
 // Import performance utilities for async JSON decoding
 import '../utils/performance_utils.dart';
+
+// Import global auth navigation service
+import 'auth_navigation_service.dart';
 
 // Custom exception for token expiration
 class TokenExpiredException implements Exception {
@@ -378,10 +380,27 @@ class ApiService {
   }
 
   Future<UserModel> getProfile() async {
-    final data = await get('/api/auth/profile', useCache: true);
+    final data = await get('/api/auth/profile', useCache: false);
+
+    if (kDebugMode) {
+      print('🔍 DEBUG getProfile - Full response: $data');
+      print('🔍 DEBUG getProfile - Success: ${data['success']}');
+      print('🔍 DEBUG getProfile - Data: ${data['data']}');
+      if (data['data'] != null) {
+        print('🔍 DEBUG getProfile - tplahir: ${data['data']['tplahir']}');
+        print('🔍 DEBUG getProfile - tgdaftar: ${data['data']['tgdaftar']}');
+        print('🔍 DEBUG getProfile - namam: ${data['data']['namam']}');
+      }
+    }
 
     if (data['success']) {
-      return UserModel.fromJson(data['data']);
+      final userModel = UserModel.fromJson(data['data']);
+      if (kDebugMode) {
+        print('🔍 DEBUG getProfile - UserModel tplahir: ${userModel.tplahir}');
+        print('🔍 DEBUG getProfile - UserModel tgdaftar: ${userModel.tgdaftar}');
+        print('🔍 DEBUG getProfile - UserModel namam: ${userModel.namam}');
+      }
+      return userModel;
     } else {
       throw Exception(data['message'] ?? 'Failed to get profile');
     }
@@ -659,6 +678,8 @@ class ApiService {
         return await _handleResponse(response);
       } else {
         // Refresh failed, user needs to login again
+        // Trigger global logout to handle auth state
+        AuthNavigationService.handleTokenExpiration(null);
         throw Exception('Sesi telah berakhir, silakan login kembali');
       }
     }

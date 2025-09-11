@@ -11,6 +11,11 @@ interface AuthenticatedRequest extends Request {
     nrm: string;
     nim: string;
     namam: string;
+    tgdaftar?: Date;
+    tplahir?: string;  // Place of birth (not date)
+    kdagama?: string;
+    email?: string;
+    phone?: string;
     tokenType: string;
   };
   refreshTokenData?: RefreshTokenPayload;
@@ -134,6 +139,8 @@ export class AuthController {
           namam: student.namam,
           tgdaftar: student.tgdaftar,
           tplahir: student.tplahir,
+          email: student.email || null,
+          phone: student.phone || null,
         },
       } as ApiResponse);
     } catch (error) {
