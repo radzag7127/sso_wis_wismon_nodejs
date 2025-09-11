@@ -4,9 +4,13 @@ import { Router } from 'express';
 import { AkademikController } from '../controllers/akademikController';
 import { authenticateToken } from '../utils/auth';
 import { validateAcademic, validateGeneral } from '../middleware/validation';
+import { authCacheMiddleware } from '../middleware/cacheControl';
 
 const router = Router();
 const akademikController = new AkademikController();
+
+// Apply cache control middleware to prevent stale authentication responses
+router.use(authCacheMiddleware);
 
 // Rute untuk mendapatkan daftar semua mahasiswa (contoh rute publik)
 router.get('/mahasiswa/daftar', akademikController.getDaftarMahasiswa); //palingan gak dipakai, bisa dihapus harusnya?

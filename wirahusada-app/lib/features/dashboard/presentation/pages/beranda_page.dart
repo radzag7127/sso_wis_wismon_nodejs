@@ -6,12 +6,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
 import 'package:wismon_keuangan/core/services/dashboard_preferences_service.dart';
 import 'package:wismon_keuangan/features/payment/presentation/pages/wismon_page.dart';
+import 'package:wismon_keuangan/features/payment/presentation/pages/dashboard_customization_page.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_page.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_bloc.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_event.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_state.dart';
 import 'package:wismon_keuangan/features/payment/presentation/components/payment_summary_card.dart';
 import 'package:wismon_keuangan/features/payment/domain/entities/payment.dart';
+import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart';
 import '../bloc/beranda_bloc.dart';
 import '../bloc/beranda_event.dart';
 import '../bloc/beranda_state.dart';
@@ -26,7 +29,7 @@ class BerandaPage extends StatefulWidget {
 }
 
 class _BerandaPageState extends State<BerandaPage>
-    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin, RouteAware {
   final PageController _carouselController = PageController();
   int _currentCarouselIndex = 0;
   Timer? _carouselTimer;
@@ -35,6 +38,9 @@ class _BerandaPageState extends State<BerandaPage>
   late final DashboardPreferencesService _preferencesService;
   List<String>? _cachedSelectedTypes;
   bool _preferencesLoaded = false;
+  
+  // Cross-tab communication for dashboard changes
+  StreamSubscription<DashboardChangeEvent>? _dashboardChangeSubscription;
 
   @override
   bool get wantKeepAlive => true; // Keep page alive when switching tabs
@@ -45,14 +51,52 @@ class _BerandaPageState extends State<BerandaPage>
     WidgetsBinding.instance.addObserver(this);
     _preferencesService = di.sl<DashboardPreferencesService>();
     _loadPreferences();
+    _setupDashboardChangeListener();
+  }
+  
+  /// Set up listener for cross-tab dashboard customization changes
+  void _setupDashboardChangeListener() {
+    _dashboardChangeSubscription = DashboardPreferencesService.changeStream.listen(
+      (DashboardChangeEvent event) {
+        if (mounted) {
+          // Dashboard preferences changed from another screen
+          // Refresh preferences cache and payment data immediately
+          _loadPreferences();
+          context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+        }
+      },
+      onError: (error) {
+        debugPrint('Error listening to dashboard changes: $error');
+      },
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ModalRoute? currentRoute = ModalRoute.of(context);
+    if (currentRoute is PageRoute) {
+      di.sl<RouteObserver<PageRoute>>().subscribe(this, currentRoute);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    di.sl<RouteObserver<PageRoute>>().unsubscribe(this);
     _carouselTimer?.cancel();
     _carouselController.dispose();
+    _dashboardChangeSubscription?.cancel(); // Clean up stream subscription
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Refresh data when returning from other pages (like customization page)
+    context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
+    context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+    // Refresh preferences cache when returning from customization
+    _loadPreferences();
   }
 
   @override
@@ -169,113 +213,131 @@ class _BerandaPageState extends State<BerandaPage>
         bloc.add(const RefreshBerandaDataEvent());
         return bloc;
       },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFFBFBFB),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(context),
-              Expanded(
-                child: BlocBuilder<BerandaBloc, BerandaState>(
-                  builder: (context, state) {
-                    if (state is BerandaLoading) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF135EA2),
+      child: MultiBlocListener(
+        listeners: [
+          // Listen to auth state changes for post-login refresh
+          BlocListener<AuthBloc, AuthState>(
+            listener: (context, authState) {
+              if (authState is AuthAuthenticated) {
+                // User just logged in successfully - refresh all data
+                context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
+                context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+                // Also refresh preferences cache
+                _loadPreferences();
+              }
+            },
+          ),
+        ],
+        child: Scaffold(
+          backgroundColor: const Color(0xFFFBFBFB),
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(context),
+                Expanded(
+                  child: BlocBuilder<BerandaBloc, BerandaState>(
+                    builder: (context, state) {
+                      if (state is BerandaLoading) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF135EA2),
+                            ),
                           ),
-                        ),
-                      );
-                    } else if (state is BerandaError) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 64,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Gagal memuat data',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                              ),
-                              child: Text(
-                                state.message,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                context.read<BerandaBloc>().add(
-                                  const FetchBerandaDataEvent(),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF207BB5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text(
-                                'Coba Lagi',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    } else if (state is BerandaLoaded) {
-                      return RefreshIndicator(
-                        onRefresh: () async {
-                          context.read<BerandaBloc>().add(
-                            const RefreshBerandaDataEvent(),
-                          );
-                        },
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          physics: const AlwaysScrollableScrollPhysics(),
+                        );
+                      } else if (state is BerandaError) {
+                        return Center(
                           child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildHeroCarousel(state.data.announcements),
+                              Icon(
+                                Icons.error_outline,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Gagal memuat data',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                ),
+                                child: Text(
+                                  state.message,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ),
                               const SizedBox(height: 24),
-                              _buildLibraryServices(state.data.libraryServices),
-                              const SizedBox(height: 24),
-                              _buildPaymentSummary(state.data.payment),
-                              const SizedBox(height: 24),
-                              _buildTranscriptSummary(state.data.transcript),
+                              ElevatedButton(
+                                onPressed: () {
+                                  context.read<BerandaBloc>().add(
+                                    const RefreshBerandaDataEvent(),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF207BB5),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Coba Lagi',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
+                        );
+                      } else if (state is BerandaLoaded) {
+                        return RefreshIndicator(
+                          onRefresh: () async {
+                            context.read<BerandaBloc>().add(
+                              const RefreshBerandaDataEvent(),
+                            );
+                            // Also refresh preferences when user pulls to refresh
+                            await _loadPreferences();
+                          },
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: Column(
+                              children: [
+                                _buildHeroCarousel(state.data.announcements),
+                                const SizedBox(height: 24),
+                                _buildLibraryServices(state.data.libraryServices),
+                                const SizedBox(height: 24),
+                                _buildPaymentSummary(state.data.payment),
+                                const SizedBox(height: 24),
+                                _buildTranscriptSummary(state.data.transcript),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -435,7 +497,7 @@ class _BerandaPageState extends State<BerandaPage>
                         shape: BoxShape.circle,
                         color: _currentCarouselIndex == index
                             ? Colors.white
-                            : Colors.white.withOpacity(0.4),
+                            : Colors.white.withValues(alpha: 0.4),
                       ),
                     ),
                   );
@@ -483,8 +545,8 @@ class _BerandaPageState extends State<BerandaPage>
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.3),
-                      Colors.black.withOpacity(0.7),
+                      Colors.black.withValues(alpha: 0.3),
+                      Colors.black.withValues(alpha: 0.7),
                     ],
                   ),
                 ),
@@ -627,14 +689,66 @@ class _BerandaPageState extends State<BerandaPage>
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
-          _buildSectionHeader(
-            title: "Rekap Biaya Kuliah",
-            actionText: "Lihat Detail",
-            onActionTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const WismonPage()),
-              );
-            },
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Rekap Biaya Kuliah",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1C1D1F),
+                  letterSpacing: -0.16,
+                ),
+              ),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: _navigateToCustomization,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF135EA2).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF135EA2)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit, size: 12, color: Color(0xFF135EA2)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Ubah',
+                            style: TextStyle(
+                              color: Color(0xFF135EA2),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _navigateToPaymentPage,
+                    child: const Text(
+                      "Lihat Detail",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF135EA2),
+                        letterSpacing: -0.14,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           // Reuse existing PaymentBloc from main.dart instead of creating new one
@@ -890,5 +1004,37 @@ class _BerandaPageState extends State<BerandaPage>
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const SettingsPage()));
+  }
+
+  /// Navigate to customization page and refresh preferences on return
+  Future<void> _navigateToCustomization() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const DashboardCustomizationPage()),
+    );
+
+    // If user made changes in customization, refresh preferences cache and payment data
+    if (result == true && mounted) {
+      await _loadPreferences(); // Refresh cached preferences
+      // Trigger payment summary reload to reflect new customizations
+      if (mounted) {
+        context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+      }
+    }
+  }
+
+  /// Navigate to payment page (wismon)
+  Future<void> _navigateToPaymentPage() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const WismonPage()),
+    );
+
+    // Refresh preferences and payment data when returning from payment page
+    // This ensures any customizations made from wismon page are reflected
+    if (mounted) {
+      await _loadPreferences();
+      if (mounted) {
+        context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+      }
+    }
   }
 }

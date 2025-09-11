@@ -5,6 +5,10 @@ import 'package:wismon_keuangan/features/auth/presentation/bloc/auth_state.dart'
 import 'package:wismon_keuangan/features/dashboard/presentation/pages/beranda_page.dart';
 import 'package:wismon_keuangan/features/menu/presentation/pages/menu_page.dart';
 import 'package:wismon_keuangan/features/profile/presentation/pages/profile_page.dart';
+import 'package:wismon_keuangan/features/dashboard/presentation/bloc/beranda_bloc.dart';
+import 'package:wismon_keuangan/features/dashboard/presentation/bloc/beranda_event.dart';
+import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_bloc.dart';
+import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_event.dart';
 
 class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});
@@ -16,6 +20,7 @@ class MainNavigationPage extends StatefulWidget {
 class _MainNavigationPageState extends State<MainNavigationPage> {
   late PageController _pageController;
   int _selectedIndex = 0;
+  int _previousIndex = 0; // Track previous tab for detecting changes
 
   // Pre-create pages to avoid recreation and enable caching
   late final List<Widget> _pages = [
@@ -41,14 +46,36 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
   void _onItemTapped(int index) {
     if (_selectedIndex != index) {
+      // Store previous index before updating
+      _previousIndex = _selectedIndex;
+      
       setState(() {
         _selectedIndex = index;
       });
+      
+      // Handle tab change logic: refresh data when switching TO Beranda tab (index 0)
+      if (index == 0 && _previousIndex != 0) {
+        // User switched to Beranda tab from another tab - refresh dashboard
+        _refreshBerandaAfterTabChange();
+      }
+      
       _pageController.animateToPage(
         index,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
       );
+    }
+  }
+  
+  /// Refresh Beranda dashboard when user switches back from other tabs
+  void _refreshBerandaAfterTabChange() {
+    try {
+      // Refresh both Beranda data and Payment data to reflect any customizations
+      context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
+      context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+    } catch (e) {
+      // Handle any BLoC access errors gracefully
+      debugPrint('Error refreshing dashboard after tab change: $e');
     }
   }
 
@@ -67,13 +94,23 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             body: PageView(
               controller: _pageController,
               onPageChanged: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
+                // Handle page swiping - same logic as tab tapping
+                if (_selectedIndex != index) {
+                  _previousIndex = _selectedIndex;
+                  
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                  
+                  // Handle refresh when swiping TO Beranda tab (index 0)
+                  if (index == 0 && _previousIndex != 0) {
+                    _refreshBerandaAfterTabChange();
+                  }
+                }
               },
-              children: _pages,
               // Add smoother physics for better transitions
               physics: const ClampingScrollPhysics(),
+              children: _pages,
             ),
             bottomNavigationBar: _buildBottomNavigationBar(),
           );

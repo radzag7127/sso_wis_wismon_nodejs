@@ -47,7 +47,16 @@ export class BerandaController {
         success: true,
         message: "Beranda data retrieved successfully",
         data: berandaData,
+        _timestamp: new Date().toISOString(), // Add timestamp for cache busting
+        _requestId: `beranda-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Unique request ID
       };
+
+      // Set additional headers to ensure fresh data after re-authentication
+      res.set({
+        'X-Data-Freshness': 'live',
+        'X-User-Context': user.nrm.substr(-4), // Last 4 chars of NRM for debugging
+        'Last-Modified': new Date().toUTCString(),
+      });
 
       res.status(200).json(response);
     } catch (error) {

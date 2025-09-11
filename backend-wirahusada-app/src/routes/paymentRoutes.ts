@@ -2,9 +2,13 @@ import { Router } from "express";
 import { PaymentController } from "../controllers/paymentController";
 import { authenticateToken } from "../utils/auth";
 import { validatePayment, validateGeneral } from "../middleware/validation";
+import { authCacheMiddleware } from "../middleware/cacheControl";
 
 const router = Router();
 const paymentController = new PaymentController();
+
+// Apply cache control middleware to prevent stale authentication responses
+router.use(authCacheMiddleware);
 
 // All payment routes require authentication
 router.use(authenticateToken);

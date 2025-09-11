@@ -69,6 +69,8 @@ export interface ApiResponse<T = any> {
   message: string;
   data?: T;
   errors?: string[];
+  _timestamp?: string; // Cache busting timestamp
+  _requestId?: string; // Unique request identifier for debugging
 }
 
 export interface LoginRequest {

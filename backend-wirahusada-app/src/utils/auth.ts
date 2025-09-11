@@ -177,22 +177,38 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
 };
 
 /**
- * Enhanced authentication middleware with better error handling
- * and security logging
+ * Enhanced authentication middleware with better error handling,
+ * security logging, and cache prevention for stale responses
  */
 export const authenticateToken = (
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
+  // Set no-cache headers immediately to prevent caching of auth errors
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'X-Auth-Middleware': 'active'
+  });
+
   const authHeader = req.headers["authorization"];
   const token = extractTokenFromHeader(authHeader);
 
   if (!token) {
+    // Add additional cache prevention headers for auth errors
+    res.set({
+      'Vary': 'Authorization',
+      'X-Auth-Error': 'token-missing',
+      'Last-Modified': new Date().toUTCString()
+    });
+    
     res.status(401).json({
       success: false,
       message: "Access token required",
       errors: ["Authorization header with Bearer token is required"],
+      _timestamp: new Date().toISOString(), // Ensure unique responses
     });
     return;
   }
@@ -217,7 +233,7 @@ export const authenticateToken = (
     console.warn(
       `🔒 Authentication failed: ${errorMessage} - IP: ${
         req.ip
-      } - User-Agent: ${req.get("user-agent")}`
+      } - User-Agent: ${req.get("user-agent")} - Timestamp: ${new Date().toISOString()}`
     );
 
     // Provide more specific status codes and error types
@@ -235,12 +251,22 @@ export const authenticateToken = (
       errorType = "token_missing";
     }
 
+    // Add specific cache prevention headers for different error types
+    res.set({
+      'Vary': 'Authorization',
+      'X-Auth-Error': errorType,
+      'X-Token-Status': 'failed',
+      'Last-Modified': new Date().toUTCString(),
+      'ETag': `"auth-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}"`
+    });
+
     res.status(statusCode).json({
       success: false,
       message: errorMessage,
       errorType: errorType,
       errors: [errorMessage],
       timestamp: new Date().toISOString(),
+      _responseId: `auth-error-${Date.now()}`, // Unique identifier to prevent caching
     });
   }
 };
