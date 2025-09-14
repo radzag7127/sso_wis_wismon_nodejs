@@ -91,11 +91,13 @@ export class AkademikController {
         const nrm = user.nrm;
         const data = await akademikService.getTranskrip(nrm);
 
-        // 4. Kirim Respon Sukses
+        // 4. Kirim Respon Sukses with user context headers
+        res.set('X-User-Context-Akademik', nrm);
         res.status(200).json({ 
             success: true, 
             message: 'Transkrip berhasil diambil', 
-            data 
+            data,
+            _userContext: nrm // Add user context to response body for client validation
         });
 
     } catch (error) {
@@ -163,59 +165,58 @@ export class AkademikController {
       }
     }
 
-    /**
-     * Controller untuk mengambil Kartu Hasil Studi (KHS).
-     * Disesuaikan agar konsisten dengan getKrs.
-     */
     async getKhs(req: Request, res: Response): Promise<void> {
-      try {
-        const user = (req as any).user as JWTPayload;
-        if (!user || !user.nrm) {
-          res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
-          return;
-        }
-        const nrm = user.nrm;
-  
-        // PERUBAHAN: Ambil 'semesterKe' dan 'jenisSemester' dari query
-        const { semesterKe, jenisSemester } = req.query;
-  
-        if (!semesterKe || !jenisSemester) {
-          res.status(400).json({
-            success: false,
-            message: "Parameter 'semesterKe' dan 'jenisSemester' wajib diisi.",
-          });
-          return;
-        }
-  
-        const semesterKeNum = parseInt(semesterKe as string, 10);
-        const jenisSemesterNum = parseInt(jenisSemester as string, 10);
-  
-        if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
-          res.status(400).json({
-            success: false,
-            message: "Parameter 'semesterKe' dan 'jenisSemester' harus berupa angka.",
-          });
-          return;
-        }
-  
-        // Panggil service dengan parameter yang sudah divalidasi
-        const data = await akademikService.getKhs(nrm, semesterKeNum, jenisSemesterNum);
-  
-        res.status(200).json({
-          success: true,
-          message: `KHS berhasil diambil`,
-          data: data,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
-        res.status(statusCode).json({
-          success: false,
-          message: 'Gagal mengambil data KHS',
-          errors: [errorMessage],
-        });
+    try {
+      const user = (req as any).user as JWTPayload;
+      if (!user || !user.nrm) {
+        res.status(401).json({ success: false, message: 'Akses ditolak. Token tidak valid.' });
+        return;
       }
+      const nrm = user.nrm;
+
+      // PERUBAHAN: Ambil 'semesterKe' dan 'jenisSemester' dari query
+      const { semesterKe, jenisSemester } = req.query;
+
+      if (!semesterKe || !jenisSemester) {
+        res.status(400).json({
+          success: false,
+          message: "Parameter 'semesterKe' dan 'jenisSemester' wajib diisi.",
+        });
+        return;
+      }
+
+      const semesterKeNum = parseInt(semesterKe as string, 10);
+      const jenisSemesterNum = parseInt(jenisSemester as string, 10);
+
+      if (isNaN(semesterKeNum) || isNaN(jenisSemesterNum)) {
+        res.status(400).json({
+          success: false,
+          message: "Parameter 'semesterKe' dan 'jenisSemester' harus berupa angka.",
+        });
+        return;
+      }
+
+      // Panggil service dengan parameter yang sudah divalidasi
+      const data = await akademikService.getKhs(nrm, semesterKeNum, jenisSemesterNum);
+
+      // Add user context headers for cache isolation
+      res.set('X-User-Context-Akademik', nrm);
+      res.status(200).json({
+        success: true,
+        message: `KHS berhasil diambil`,
+        data: data,
+        _userContext: nrm // Add user context to response body for client validation
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const statusCode = errorMessage.toLowerCase().includes('ditemukan') ? 404 : 500;
+      res.status(statusCode).json({
+        success: false,
+        message: 'Gagal mengambil data KHS',
+        errors: [errorMessage],
+      });
     }
+  }
 
   async getKrs(req: Request, res: Response): Promise<void> {
     try {
@@ -252,10 +253,13 @@ export class AkademikController {
       // Panggil service dengan parameter yang sudah divalidasi
       const data = await akademikService.getKrs(nrm, semesterKeNum, jenisSemesterNum);
 
+      // Add user context headers for cache isolation
+      res.set('X-User-Context-Akademik', nrm);
       res.status(200).json({
         success: true,
         message: 'Data KRS berhasil diambil',
         data: data,
+        _userContext: nrm // Add user context to response body for client validation
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

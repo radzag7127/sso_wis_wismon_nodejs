@@ -242,14 +242,22 @@ export class AuthController {
 
   /**
    * POST /auth/logout
-   * Logout user by clearing refresh token
+   * Logout user by clearing refresh token and additional cache data
    */
   async logout(req: Request, res: Response): Promise<void> {
     try {
       // Clear the refresh token cookie
       res.clearCookie('refreshToken');
       
-      console.log("🚪 LOGOUT - User logged out successfully");
+      // Get user info from request if available (for logging)
+      const user = (req as any).user;
+      
+      console.log("🚪 LOGOUT - User logged out successfully", {
+        userNrm: user?.nrm || 'unknown',
+        timestamp: new Date().toISOString(),
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      });
       
       res.status(200).json({
         success: true,

@@ -147,3 +147,64 @@ export const clearAuthCacheMiddleware = (
 
   next();
 };
+
+/**
+ * Enhanced logout cache clearing middleware
+ * Specifically designed to ensure all user data is cleared on logout
+ */
+export const logoutCacheClearMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  // Add comprehensive headers to force cache invalidation
+  res.set({
+    'Clear-Site-Data': '"cache", "storage", "cookies"',
+    'X-Cache-Invalidate': 'all-user-data',
+    'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0, no-transform',
+    'Pragma': 'no-cache',
+    'Expires': '-1',
+    'Vary': '*',
+    'X-Logout-Timestamp': new Date().toISOString()
+  });
+
+  next();
+};
+
+/**
+ * User context isolation middleware
+ * Ensures that user-specific data is never cached in a way that could leak between users
+ */
+export const userContextIsolationMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  // Get user context from request (set by authentication middleware)
+  const user = (req as any).user;
+  
+  // Add user-specific cache headers to prevent cross-user data leakage
+  if (user && user.nrm) {
+    // Make responses vary by user context
+    res.set({
+      'Vary': 'Authorization, X-User-Context',
+      'X-User-Context': user.nrm,
+      'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
+    // Add user-specific ETag
+    const etag = `"user-${user.nrm}-${Date.now()}"`;
+    res.set('ETag', etag);
+  } else {
+    // For non-authenticated requests, still apply no-cache
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+  }
+
+  next();
+};

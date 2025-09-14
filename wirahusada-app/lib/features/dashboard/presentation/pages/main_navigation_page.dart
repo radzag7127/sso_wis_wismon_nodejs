@@ -72,10 +72,17 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     try {
       // Refresh both Beranda data and Payment data to reflect any customizations
       context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
-      context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
     } catch (e) {
-      // Handle any BLoC access errors gracefully
-      debugPrint('Error refreshing dashboard after tab change: $e');
+      // Handle any BLoC access errors gracefully - BerandaBloc may not be available yet
+      debugPrint('BerandaBloc not available for refresh after tab change: $e');
+    }
+    
+    try {
+      // Load payment summary after tab switch
+      context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+    } catch (e) {
+      // Handle any BLoC access errors gracefully - PaymentBloc may not be available yet
+      debugPrint('PaymentBloc not available for refresh after tab change: $e');
     }
   }
 
@@ -114,6 +121,17 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             ),
             bottomNavigationBar: _buildBottomNavigationBar(),
           );
+        }
+        
+        // When user is unauthenticated (logged out), reset BerandaBloc
+        if (state is AuthUnauthenticated) {
+          try {
+            // Reset BerandaBloc user context
+            context.read<BerandaBloc>().updateCurrentUser(null);
+          } catch (e) {
+            // Handle any BLoC access errors gracefully - BerandaBloc may not be available
+            debugPrint('BerandaBloc not available for logout reset: $e');
+          }
         }
 
         return const Center(child: Text('Loading...'));

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { AuthController } from "../controllers/authController";
 import { authenticateToken, authenticateRefreshToken } from "../utils/auth";
 import { validateAuth } from "../middleware/validation";
-import { clearAuthCacheMiddleware, noCacheMiddleware } from "../middleware/cacheControl";
+import { clearAuthCacheMiddleware, noCacheMiddleware, logoutCacheClearMiddleware } from "../middleware/cacheControl";
 import rateLimit from "express-rate-limit";
 
 // Rate limiting configuration for authentication endpoints
@@ -74,7 +74,7 @@ router.post(
 // Logout endpoint (public but secured with CSRF protection via cookies)
 router.post(
   "/logout",
-  clearAuthCacheMiddleware, // Clear all cached auth data on logout
+  logoutCacheClearMiddleware, // Enhanced cache clearing on logout
   authController.logout.bind(authController)
 );
 

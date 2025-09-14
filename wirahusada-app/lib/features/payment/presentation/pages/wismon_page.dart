@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
@@ -34,26 +35,52 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
   // Cache preferences to avoid disk I/O on rebuilds
   List<String>? _cachedSelectedTypes;
   bool _preferencesLoaded = false;
+  
+  // Cross-page communication for dashboard changes
+  StreamSubscription<DashboardChangeEvent>? _dashboardChangeSubscription;
 
   @override
   void initState() {
     super.initState();
     _preferencesService = di.sl<DashboardPreferencesService>();
     _apiService = di.sl<ApiService>();
+    _setupDashboardChangeListener();
     _loadPreferences();
     _loadPaymentData();
+  }
+  
+  /// Set up listener for cross-page dashboard customization changes
+  void _setupDashboardChangeListener() {
+    _dashboardChangeSubscription = DashboardPreferencesService.changeStream.listen(
+      (DashboardChangeEvent event) {
+        if (mounted) {
+          debugPrint('🔧 WismonPage: Dashboard change detected - ${event.changeType}');
+          // Dashboard preferences changed from another screen or customization page
+          // Refresh preferences cache and payment summary immediately
+          _loadPreferences();
+          // Also refresh payment summary to show updated dashboard
+          context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+        }
+      },
+      onError: (error) {
+        debugPrint('🔧 WismonPage: Error listening to dashboard changes: $error');
+      },
+    );
   }
 
   Future<void> _loadPreferences() async {
     try {
+      debugPrint('🔧 WismonPage: Loading dashboard preferences...');
       final types = await _preferencesService.getSelectedPaymentTypes();
       if (mounted) {
         setState(() {
           _cachedSelectedTypes = types;
           _preferencesLoaded = true;
         });
+        debugPrint('🔧 WismonPage: Dashboard preferences loaded - ${types.length} types selected');
       }
     } catch (e) {
+      debugPrint('🔧 WismonPage: Error loading preferences: $e');
       // Handle error gracefully, use defaults
       if (mounted) {
         setState(() {
@@ -77,11 +104,18 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
   @override
   void dispose() {
     di.sl<RouteObserver<PageRoute>>().unsubscribe(this);
+    _dashboardChangeSubscription?.cancel(); // Clean up stream subscription
     super.dispose();
   }
 
   @override
   void didPopNext() {
+    debugPrint('🔧 WismonPage: didPopNext - user returned to wismon page');
+    
+    // Refresh preferences when returning from other pages (like customization page)
+    _loadPreferences();
+    
+    // Refresh payment data when returning from other pages
     context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
     context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
   }
@@ -146,6 +180,17 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
       _filteredHistoryItems = _historyItems!
           .where((item) => item.type == _selectedPaymentTypeCode)
           .toList();
+    }
+  }
+  
+  Future<void> _onRefreshData(BuildContext context) async {
+    debugPrint('🔧 WismonPage: Pull-to-refresh triggered');
+    // Refresh dashboard preferences first
+    await _loadPreferences();
+    // Then refresh payment data
+    if (mounted) {
+      context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+      context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
     }
   }
 
@@ -283,10 +328,7 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
 
   Widget _buildPaymentContent(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: () async {
-        context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
-        context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
-      },
+      onRefresh: () => _onRefreshData(context),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
@@ -459,13 +501,18 @@ class _WismonPageState extends State<WismonPage> with RouteAware {
   }
 
   Future<void> _navigateToCustomization(BuildContext context) async {
+    debugPrint('🔧 WismonPage: Navigating to customization page...');
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const DashboardCustomizationPage()),
     );
 
     // If user made changes, refresh preferences cache and UI
     if (result == true && mounted) {
+      debugPrint('🔧 WismonPage: User saved customization changes - refreshing UI');
       await _loadPreferences(); // Refresh cached preferences
+      // Note: Stream listener will also trigger, providing double-assurance
+    } else {
+      debugPrint('🔧 WismonPage: User canceled customization or no changes made');
     }
   }
 

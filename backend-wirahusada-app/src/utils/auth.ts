@@ -216,6 +216,24 @@ export const authenticateToken = (
   try {
     const decoded = verifyAccessToken(token);
 
+    // Validate user context integrity
+    if (!decoded.nrm || !decoded.nim || !decoded.namam) {
+      console.warn(
+        `🔒 Authentication failed: Invalid token payload - IP: ${
+          req.ip
+        } - User-Agent: ${req.get("user-agent")} - Timestamp: ${new Date().toISOString()}`
+      );
+      
+      res.status(401).json({
+        success: false,
+        message: "Invalid token payload",
+        errors: ["Token missing required user information"],
+        timestamp: new Date().toISOString(),
+        _responseId: `auth-error-${Date.now()}`,
+      });
+      return;
+    }
+
     // Attach user info to request object with proper typing
     (req as any).user = {
       nrm: decoded.nrm,
@@ -223,6 +241,12 @@ export const authenticateToken = (
       namam: decoded.namam,
       tokenType: decoded.type,
     };
+
+    // Add user context to response headers for client-side cache isolation
+    res.set({
+      'X-User-Context': decoded.nrm,
+      'Vary': 'Authorization, X-User-Context'
+    });
 
     next();
   } catch (error) {

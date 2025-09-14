@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/di/injection_container.dart' as di;
@@ -12,9 +14,10 @@ import 'features/auth/presentation/bloc/auth_state.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/main_navigation_page.dart';
 import 'features/payment/presentation/bloc/payment_bloc.dart';
+import 'features/payment/presentation/bloc/payment_event.dart';
 import 'features/dashboard/presentation/bloc/beranda_bloc.dart';
-import 'features/dashboard/presentation/bloc/beranda_event.dart';
 import 'core/services/api_service.dart';
+import 'core/services/dashboard_preferences_service.dart';
 
 // Cache the text theme to prevent repeated font loading
 late final TextTheme _cachedTextTheme;
@@ -22,6 +25,12 @@ late final ThemeData _cachedThemeData;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive for fast, reliable local storage
+  await Hive.initFlutter();
+  
+  // Open the dashboard preferences box
+  await Hive.openBox('dashboard_preferences');
 
   // Performance optimizations
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -153,15 +162,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _preloadCriticalData() {
-    // Defer non-critical data loading to prevent blocking main thread during startup
+    // STARTUP FIX: Remove aggressive preloading to prevent race conditions
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Use a slight delay to ensure UI is fully rendered before starting data loading
-      Future.delayed(const Duration(milliseconds: 100), () {
+      // Use a longer delay to ensure all systems are ready
+      Future.delayed(const Duration(milliseconds: 500), () {
         try {
           // Only preload critical data that's immediately visible
-          // Payment summary will be loaded on-demand when dashboard is accessed
-          final berandaBloc = di.sl<BerandaBloc>();
-          berandaBloc.add(const FetchBerandaDataEvent());
+          // This will be triggered after AuthBloc determines the user is authenticated
+          debugPrint('STARTUP FIX: Critical data preload deferred until auth state is resolved');
         } catch (e) {
           // Handle any initialization errors gracefully
           debugPrint('Error preloading critical data: $e');
@@ -176,6 +184,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _memoryCleanupTimer?.cancel();
     // Clean up API service connections
     ApiService.dispose();
+    // Clean up Hive resources
+    DashboardPreferencesService.dispose();
     super.dispose();
   }
 
@@ -242,6 +252,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => di.sl<PaymentBloc>(),
           lazy: true, // Use lazy loading to defer initialization until actually needed
         ),
+        BlocProvider(
+          create: (_) => di.sl<BerandaBloc>(),
+          lazy: true, // Use lazy loading to defer initialization until actually needed
+        ),
       ],
       child: MaterialApp(
         title: 'Wismon Keuangan',
@@ -298,6 +312,85 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 }
 
+/// Set user context for Hive dashboard preferences
+Future<void> _setUserContextForHive(String userNrm) async {
+  try {
+    final dashboardService = DashboardPreferencesService();
+    await dashboardService.setUserContext(userNrm);
+    debugPrint('✅ Set Hive user context: $userNrm');
+  } catch (e) {
+    debugPrint('❌ Error setting Hive user context: $e');
+  }
+}
+
+/// Clear user context for Hive dashboard preferences on logout
+Future<void> _clearUserContextFromHive() async {
+  try {
+    final dashboardService = DashboardPreferencesService();
+    await dashboardService.clearPreferences();
+    debugPrint('✅ Cleared Hive user context');
+  } catch (e) {
+    debugPrint('❌ Error clearing Hive user context: $e');
+  }
+}
+
+/// RADICAL SOLUTION: Aggressively reset BLoCs and clear all caches when user logs out
+void _resetBlocsOnLogout(BuildContext context) {
+  debugPrint('🔥 RADICAL: Starting aggressive logout cleanup');
+  
+  // Clear Hive user context first
+  _clearUserContextFromHive();
+  
+  try {
+    // Use a safer approach to check if providers are available
+    final berandaBloc = context.read<BerandaBloc>();
+    berandaBloc.updateCurrentUser(null);
+    debugPrint('🔥 RADICAL: BerandaBloc user context cleared');
+  } catch (e) {
+    debugPrint('BerandaBloc not available for logout reset: $e');
+  }
+  
+  try {
+    final paymentBloc = context.read<PaymentBloc>();
+    paymentBloc.add(const ResetPaymentBlocEvent());
+    debugPrint('🔥 RADICAL: PaymentBloc reset event sent');
+  } catch (e) {
+    debugPrint('PaymentBloc not available for logout reset: $e');
+  }
+  
+  // RADICAL SOLUTION: Aggressively clear SharedPreferences on logout
+  _aggressivelyClearUserData();
+}
+
+/// STARTUP FIX: More controlled BLoC updates when user logs in
+void _updateBlocsOnLogin(BuildContext context, String userNrm) {
+  debugPrint('🔥 STARTUP: Starting controlled login update for user: $userNrm');
+  
+  // STARTUP FIX: Clear user data but less aggressively
+  _selectivelyClearUserData();
+  
+  // Set user context for Hive dashboard preferences
+  _setUserContextForHive(userNrm);
+  
+  try {
+    final berandaBloc = context.read<BerandaBloc>();
+    berandaBloc.updateCurrentUser(userNrm);
+    // STARTUP FIX: Let beranda page handle its own startup sequence
+    debugPrint('🔥 STARTUP: BerandaBloc updated with new user');
+  } catch (e) {
+    debugPrint('BerandaBloc not available for login update: $e');
+  }
+  
+  try {
+    final paymentBloc = context.read<PaymentBloc>();
+    // STARTUP FIX: Only reset, let beranda page handle loading sequence
+    paymentBloc.add(const ResetPaymentBlocEvent());
+    debugPrint('🔥 STARTUP: PaymentBloc reset completed');
+  } catch (e) {
+    debugPrint('PaymentBloc not available for login update: $e');
+  }
+}
+
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -313,9 +406,13 @@ class AuthWrapper extends StatelessWidget {
         if (state is AuthUnauthenticated || state is AuthError) {
           // Clear any existing routes and navigate to login
           Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+          // Reset BLoCs when user logs out (use safer approach)
+          _resetBlocsOnLogout(context);
         } else if (state is AuthAuthenticated) {
           // Navigate to main app
           Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+          // Update BLoCs with new user context (use safer approach)
+          _updateBlocsOnLogin(context, state.user.nrm);
         }
       },
       child: OptimizedBlocBuilder<AuthBloc, AuthState>(
@@ -335,6 +432,69 @@ class AuthWrapper extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// STARTUP FIX: More selective user data clearing
+Future<void> _selectivelyClearUserData() async {
+  try {
+    debugPrint('🔥 STARTUP: Starting selective user data clearing');
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Only clear payment and user-specific keys, keep dashboard preferences
+    final keysToRemove = prefs.getKeys().where((key) => 
+      key.contains('payment') ||
+      key.contains('wismon') ||
+      key.contains('user_payment_data') ||
+      key.contains('cached_payment') ||
+      key.startsWith('user_payment_')
+    ).toList();
+    
+    for (final key in keysToRemove) {
+      await prefs.remove(key);
+      debugPrint('🔥 STARTUP: Cleared cache key: $key');
+    }
+    
+    // Clear payment-specific cache patterns
+    await prefs.remove('last_payment_load_time');
+    await prefs.remove('payment_summary_cache');
+    
+    debugPrint('🔥 STARTUP: Cleared ${keysToRemove.length} cached keys');
+  } catch (e) {
+    debugPrint('🔥 STARTUP: Error clearing user data: $e');
+  }
+}
+
+/// RADICAL SOLUTION: Aggressively clear all user-related cached data (keep for existing function calls)
+Future<void> _aggressivelyClearUserData() async {
+  try {
+    debugPrint('🔥 RADICAL: Starting aggressive user data clearing');
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Clear all payment, dashboard, and user-specific keys
+    final keysToRemove = prefs.getKeys().where((key) => 
+      key.contains('payment') ||
+      key.contains('wismon') ||
+      key.contains('dashboard_preferences') ||
+      key.contains('user_payment_data') ||
+      key.contains('beranda_') ||
+      key.contains('cached_') ||
+      key.startsWith('user_')
+    ).toList();
+    
+    for (final key in keysToRemove) {
+      await prefs.remove(key);
+      debugPrint('🔥 RADICAL: Cleared cache key: $key');
+    }
+    
+    // Also clear common cache patterns
+    await prefs.remove('last_payment_load_time');
+    await prefs.remove('payment_summary_cache');
+    await prefs.remove('dashboard_customization_cache');
+    
+    debugPrint('🔥 RADICAL: Cleared ${keysToRemove.length} cached keys');
+  } catch (e) {
+    debugPrint('🔥 RADICAL: Error clearing user data: $e');
   }
 }
 

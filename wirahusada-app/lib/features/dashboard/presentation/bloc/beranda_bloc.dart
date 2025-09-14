@@ -7,6 +7,7 @@ import 'beranda_state.dart';
 
 class BerandaBloc extends Bloc<BerandaEvent, BerandaState> {
   final GetBerandaDataUseCase getBerandaDataUseCase;
+  String? _currentUserNrm;
 
   BerandaBloc({required this.getBerandaDataUseCase})
     : super(const BerandaInitial()) {
@@ -55,6 +56,15 @@ class BerandaBloc extends Bloc<BerandaEvent, BerandaState> {
         return (failure as CacheFailure).message;
       default:
         return 'Terjadi kesalahan yang tidak terduga';
+    }
+  }
+
+  // Method to update current user context
+  void updateCurrentUser(String? nrm) {
+    if (_currentUserNrm != nrm) {
+      _currentUserNrm = nrm;
+      // Reset state to initial when user changes
+      add(const RefreshBerandaDataEvent());
     }
   }
 }

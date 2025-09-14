@@ -63,10 +63,14 @@ export class PaymentController {
         firstItem: result?.data?.[0],
       });
 
+      // Add user context to response for additional cache isolation
+      res.set('X-User-Context-Payment', user.nrm);
+      
       res.status(200).json({
         success: true,
         message: "Payment history retrieved successfully",
         data: result,
+        _userContext: user.nrm, // Add user context to response body for client validation
       } as ApiResponse);
     } catch (error) {
       console.error("💳 PAYMENT HISTORY - Error:", error);

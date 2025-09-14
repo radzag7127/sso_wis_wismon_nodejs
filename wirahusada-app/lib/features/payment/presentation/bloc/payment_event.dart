@@ -54,3 +54,37 @@ class LoadTransactionDetailEvent extends PaymentEvent {
 class RefreshPaymentDataEvent extends PaymentEvent {
   const RefreshPaymentDataEvent();
 }
+
+class ResetPaymentBlocEvent extends PaymentEvent {
+  const ResetPaymentBlocEvent();
+}
+
+/// RADICAL SOLUTION: Force payment data loading with aggressive refresh
+class ForcePaymentRefreshEvent extends PaymentEvent {
+  final bool clearCache;
+  final bool bypassCurrentState;
+  final String debugSource;
+  
+  const ForcePaymentRefreshEvent({
+    this.clearCache = true,
+    this.bypassCurrentState = true,
+    this.debugSource = 'unknown',
+  });
+  
+  @override
+  List<Object> get props => [clearCache, bypassCurrentState, debugSource];
+}
+
+/// RADICAL SOLUTION: Pre-emptive payment loading for critical scenarios
+class PreemptivePaymentLoadEvent extends PaymentEvent {
+  final String userNrm;
+  final String loadSource;
+  
+  const PreemptivePaymentLoadEvent({
+    required this.userNrm,
+    required this.loadSource,
+  });
+  
+  @override
+  List<Object> get props => [userNrm, loadSource];
+}

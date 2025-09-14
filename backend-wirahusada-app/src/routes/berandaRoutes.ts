@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { BerandaController } from "../controllers/berandaController";
 import { authenticateToken } from "../utils/auth";
-import { authCacheMiddleware, noCacheMiddleware } from "../middleware/cacheControl";
+import { authCacheMiddleware, noCacheMiddleware, userContextIsolationMiddleware } from "../middleware/cacheControl";
 
 const router = Router();
 const berandaController = new BerandaController();
@@ -11,6 +11,9 @@ router.use(authCacheMiddleware);
 
 // All beranda routes require authentication
 router.use(authenticateToken);
+
+// Apply user context isolation to prevent cross-user data leakage
+router.use(userContextIsolationMiddleware);
 
 // Get aggregated beranda data - critical endpoint for session cache issues
 router.get("/", 

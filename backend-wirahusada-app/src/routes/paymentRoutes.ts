@@ -2,7 +2,7 @@ import { Router } from "express";
 import { PaymentController } from "../controllers/paymentController";
 import { authenticateToken } from "../utils/auth";
 import { validatePayment, validateGeneral } from "../middleware/validation";
-import { authCacheMiddleware } from "../middleware/cacheControl";
+import { authCacheMiddleware, userContextIsolationMiddleware } from "../middleware/cacheControl";
 
 const router = Router();
 const paymentController = new PaymentController();
@@ -12,6 +12,9 @@ router.use(authCacheMiddleware);
 
 // All payment routes require authentication
 router.use(authenticateToken);
+
+// Apply user context isolation to prevent cross-user data leakage
+router.use(userContextIsolationMiddleware);
 
 // Payment history with filtering and pagination validation
 router.get(

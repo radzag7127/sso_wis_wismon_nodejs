@@ -113,8 +113,35 @@ class ApiService {
   Future<String?> getAuthToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('auth_token');
+      final token = prefs.getString('auth_token');
+      if (kDebugMode) {
+        if (token != null) {
+          print('🔑 [APIService] Retrieved auth token, length: ${token.length}');
+          print('🔑 [APIService] Token preview: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+          
+          // Check token expiry
+          final expiry = prefs.getInt('token_expiry');
+          if (expiry != null) {
+            final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            final remainingSeconds = expiry - now;
+            print('⏰ [APIService] Token expires in: $remainingSeconds seconds');
+            if (remainingSeconds <= 0) {
+              print('⏰ [APIService] ⚠️ TOKEN HAS EXPIRED!');
+            } else if (remainingSeconds < 120) {
+              print('⏰ [APIService] ⚠️ TOKEN EXPIRING SOON (less than 2 minutes)');
+            }
+          } else {
+            print('⏰ [APIService] ⚠️ NO TOKEN EXPIRY SET!');
+          }
+        } else {
+          print('⚠️ [APIService] No auth token found in SharedPreferences');
+        }
+      }
+      return token;
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ [APIService] Error getting auth token: $e');
+      }
       return null;
     }
   }
@@ -123,6 +150,8 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('auth_token', token);
+      // Clear cache when new auth token is set to prevent data leakage
+      _cache.clear();
     } catch (e) {
       // Handle storage error gracefully
     }
@@ -134,6 +163,11 @@ class ApiService {
       await prefs.remove('auth_token');
       await prefs.remove('refresh_token');
       await prefs.remove('token_expiry');
+      // Clear dashboard preferences on logout to prevent data leakage
+      await prefs.remove('dashboard_payment_types');
+      await prefs.remove('dashboard_has_customized');
+      // Clear API cache on logout to prevent data leakage
+      _cache.clear();
     } catch (e) {
       // Handle error gracefully
     }
@@ -152,6 +186,8 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('refresh_token', token);
+      // Clear cache when new refresh token is set to prevent data leakage
+      _cache.clear();
     } catch (e) {
       // Handle storage error gracefully
     }
@@ -198,6 +234,11 @@ class ApiService {
 
     if (token != null) {
       headers['Authorization'] = 'Bearer $token';
+      if (kDebugMode) {
+        print('🔐 Adding auth header with token preview: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+      }
+    } else if (kDebugMode) {
+      print('⚠️ No auth token available for request - this could cause auth issues');
     }
 
     return headers;
@@ -208,7 +249,10 @@ class ApiService {
     String endpoint, {
     bool useCache = false,
   }) async {
-    final cacheKey = 'GET_$endpoint';
+    // Include user context in cache key to prevent cross-user data leakage
+    final token = await getAuthToken();
+    final userContext = token?.substring(0, token.length > 10 ? 10 : token.length) ?? 'no-auth';
+    final cacheKey = 'GET_${endpoint}_user_${userContext.hashCode}';
 
     // Check cache first if enabled
     if (useCache) {
@@ -220,7 +264,6 @@ class ApiService {
 
     try {
       final data = await _makeRequestWithRetry(() async {
-        final token = await getAuthToken();
         final url = Uri.parse('$baseUrl$endpoint');
         final headers = _getHeaders(token);
 
@@ -248,13 +291,7 @@ class ApiService {
     } on FormatException {
       throw Exception('Respons server tidak valid');
     } catch (e) {
-      // Minimal error logging
-      if (kDebugMode) {
-        print('❌ API Error: $endpoint - ${e.toString()}');
-      }
-      throw Exception(
-        'Terjadi kesalahan: ${e.toString().replaceAll("Exception: ", "")}',
-      );
+      throw Exception('Terjadi kesalahan: ${e.toString()}');
     }
   }
 
@@ -462,11 +499,26 @@ class ApiService {
   Future<PaymentSummaryModel> getPaymentSummary({
     bool forceRefresh = false,
   }) async {
-    final data = await get('/api/payments/summary', useCache: !forceRefresh);
+    if (kDebugMode) {
+      print('💳 [APIService] Requesting payment summary...');
+      print('💳 [APIService] Force refresh: $forceRefresh');
+    }
+    
+    // Don't use cache for payment summary to ensure fresh user-specific data
+    final data = await get('/api/payments/summary', useCache: false);
 
     if (data['success']) {
+      if (kDebugMode) {
+        print('✅ [APIService] Payment summary received successfully');
+        print('📊 [APIService] Summary breakdown keys: ${data['data']?['breakdown']?.keys?.toList()}');
+        print('📊 [APIService] Summary total amount: ${data['data']?['total_amount']}');
+      }
       return PaymentSummaryModel.fromJson(data['data']);
     } else {
+      if (kDebugMode) {
+        print('❌ [APIService] Payment summary request failed: ${data['message']}');
+        print('🔢 [APIService] Response data: $data');
+      }
       throw Exception(data['message'] ?? 'Failed to get payment summary');
     }
   }
@@ -498,7 +550,8 @@ class ApiService {
   Future<List<PaymentTypeModel>> getPaymentTypes({
     bool forceRefresh = false,
   }) async {
-    final data = await get('/api/payments/types', useCache: !forceRefresh);
+    // Don't use cache for payment types to ensure fresh data
+    final data = await get('/api/payments/types', useCache: false);
 
     if (data['success']) {
       final List<dynamic> typesData = data['data'];
@@ -525,6 +578,8 @@ class ApiService {
         
         if (kDebugMode) {
           print('🔒 Auth error type: $errorType, message: $message');
+          print('🔒 Response headers: ${response.headers}');
+          print('🔒 Response body: ${response.body}');
         }
         
         // Don't immediately throw - let the caller handle token refresh
@@ -572,6 +627,8 @@ class ApiService {
 
       if (kDebugMode) {
         print('🔄 Attempting token refresh...');
+        print('🔄 Refresh token length: ${refreshToken.length}');
+        print('🔄 Refresh token preview: ${refreshToken.substring(0, refreshToken.length > 10 ? 10 : refreshToken.length)}...');
       }
 
       final response = await _client!
@@ -634,6 +691,7 @@ class ApiService {
 
       if (kDebugMode) {
         print('❌ Token refresh failed: ${response.statusCode}');
+        print('❌ Response body: ${response.body}');
       }
       return false;
     } catch (e) {
@@ -673,10 +731,16 @@ class ApiService {
 
       final refreshSuccess = await refreshToken();
       if (refreshSuccess) {
+        if (kDebugMode) {
+          print('✅ Token refresh successful, retrying request...');
+        }
         // Retry the original request with new token
         final response = await request();
         return await _handleResponse(response);
       } else {
+        if (kDebugMode) {
+          print('❌ Token refresh failed, triggering logout...');
+        }
         // Refresh failed, user needs to login again
         // Trigger global logout to handle auth state
         AuthNavigationService.handleTokenExpiration(null);

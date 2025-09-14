@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wismon_keuangan/core/di/injection_container.dart' as di;
 import 'package:wismon_keuangan/core/services/dashboard_preferences_service.dart';
+import 'package:wismon_keuangan/core/services/api_service.dart';
 import 'package:wismon_keuangan/features/payment/presentation/pages/wismon_page.dart';
-import 'package:wismon_keuangan/features/payment/presentation/pages/dashboard_customization_page.dart';
 import 'package:wismon_keuangan/features/transkrip/presentation/pages/transkrip_page.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_bloc.dart';
 import 'package:wismon_keuangan/features/payment/presentation/bloc/payment_event.dart';
@@ -41,6 +42,19 @@ class _BerandaPageState extends State<BerandaPage>
   
   // Cross-tab communication for dashboard changes
   StreamSubscription<DashboardChangeEvent>? _dashboardChangeSubscription;
+  
+  // RADICAL SOLUTION: Direct API fallback variables
+  PaymentSummary? _directApiPaymentSummary;
+  bool _directApiLoading = false;
+  String? _directApiError;
+  Timer? _paymentPollingTimer;
+  int _paymentLoadAttempts = 0;
+  static const int maxPaymentLoadAttempts = 5;
+  
+  // STARTUP FIX: Track first startup to prevent over-aggressive loading
+  bool _isFirstStartup = true;
+  bool _berandaDataLoaded = false;
+  Timer? _startupDelayTimer;
 
   @override
   bool get wantKeepAlive => true; // Keep page alive when switching tabs
@@ -52,6 +66,11 @@ class _BerandaPageState extends State<BerandaPage>
     _preferencesService = di.sl<DashboardPreferencesService>();
     _loadPreferences();
     _setupDashboardChangeListener();
+    
+    // STARTUP FIX: Load beranda data first, then payments with delay
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startupSequence();
+    });
   }
   
   /// Set up listener for cross-tab dashboard customization changes
@@ -62,7 +81,11 @@ class _BerandaPageState extends State<BerandaPage>
           // Dashboard preferences changed from another screen
           // Refresh preferences cache and payment data immediately
           _loadPreferences();
-          context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+          try {
+            context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+          } catch (e) {
+            debugPrint('PaymentBloc not available for dashboard change refresh: $e');
+          }
         }
       },
       onError: (error) {
@@ -85,6 +108,8 @@ class _BerandaPageState extends State<BerandaPage>
     WidgetsBinding.instance.removeObserver(this);
     di.sl<RouteObserver<PageRoute>>().unsubscribe(this);
     _carouselTimer?.cancel();
+    _paymentPollingTimer?.cancel(); // RADICAL SOLUTION: Cancel polling timer
+    _startupDelayTimer?.cancel(); // STARTUP FIX: Cancel startup timer
     _carouselController.dispose();
     _dashboardChangeSubscription?.cancel(); // Clean up stream subscription
     super.dispose();
@@ -92,9 +117,21 @@ class _BerandaPageState extends State<BerandaPage>
 
   @override
   void didPopNext() {
+    debugPrint('🔥 RADICAL: didPopNext - user returned to beranda');
+    
     // Refresh data when returning from other pages (like customization page)
-    context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
-    context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+    try {
+      context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
+    } catch (e) {
+      debugPrint('BerandaBloc not available for refresh on didPopNext: $e');
+    }
+    
+    // STARTUP FIX: No longer first startup, use normal loading
+    _isFirstStartup = false;
+    
+    // RADICAL SOLUTION: Aggressively reload payment data when returning
+    _triggerAggressivePaymentLoad('didPopNext');
+    
     // Refresh preferences cache when returning from customization
     _loadPreferences();
   }
@@ -206,24 +243,40 @@ class _BerandaPageState extends State<BerandaPage>
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    return BlocProvider(
-      create: (context) {
-        final bloc = di.sl<BerandaBloc>();
-        // Always start with a refresh to ensure fresh data
-        bloc.add(const RefreshBerandaDataEvent());
-        return bloc;
-      },
-      child: MultiBlocListener(
+    return MultiBlocListener(
         listeners: [
           // Listen to auth state changes for post-login refresh
           BlocListener<AuthBloc, AuthState>(
             listener: (context, authState) {
               if (authState is AuthAuthenticated) {
+                debugPrint('🔥 RADICAL: User authenticated - triggering startup sequence');
                 // User just logged in successfully - refresh all data
-                context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
-                context.read<PaymentBloc>().add(const RefreshPaymentDataEvent());
+                try {
+                  context.read<BerandaBloc>().add(const RefreshBerandaDataEvent());
+                  // Update current user context in BerandaBloc
+                  context.read<BerandaBloc>().updateCurrentUser(authState.user.nrm);
+                } catch (e) {
+                  debugPrint('BerandaBloc not available for auth state change: $e');
+                }
+                
+                // STARTUP FIX: Reset first startup flag and use startup sequence
+                _isFirstStartup = true;
+                _berandaDataLoaded = false;
+                _startupSequence();
+                
                 // Also refresh preferences cache
                 _loadPreferences();
+              } else if (authState is AuthUnauthenticated) {
+                debugPrint('🔥 RADICAL: User unauthenticated - stopping payment polling');
+                // User logged out - reset BerandaBloc user context
+                try {
+                  context.read<BerandaBloc>().updateCurrentUser(null);
+                } catch (e) {
+                  debugPrint('BerandaBloc not available for logout reset: $e');
+                }
+                _stopPaymentPolling();
+                _isFirstStartup = true; // Reset for next login
+                _berandaDataLoaded = false;
               }
             },
           ),
@@ -237,7 +290,29 @@ class _BerandaPageState extends State<BerandaPage>
                 Expanded(
                   child: BlocBuilder<BerandaBloc, BerandaState>(
                     builder: (context, state) {
-                      if (state is BerandaLoading) {
+                      // STARTUP FIX: Always show initial loading on first startup
+                      if ((state is BerandaLoading || state is BerandaInitial) && _isFirstStartup) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF135EA2),
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'Memuat data...',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF666666),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else if (state is BerandaLoading) {
                         return const Center(
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
@@ -281,9 +356,13 @@ class _BerandaPageState extends State<BerandaPage>
                               const SizedBox(height: 24),
                               ElevatedButton(
                                 onPressed: () {
-                                  context.read<BerandaBloc>().add(
-                                    const RefreshBerandaDataEvent(),
-                                  );
+                                  try {
+                                    context.read<BerandaBloc>().add(
+                                      const RefreshBerandaDataEvent(),
+                                    );
+                                  } catch (e) {
+                                    debugPrint('BerandaBloc not available for retry: $e');
+                                  }
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF207BB5),
@@ -307,11 +386,28 @@ class _BerandaPageState extends State<BerandaPage>
                           ),
                         );
                       } else if (state is BerandaLoaded) {
+                        // STARTUP FIX: Mark beranda data as loaded and trigger payment load if first startup
+                        if (_isFirstStartup && !_berandaDataLoaded) {
+                          _berandaDataLoaded = true;
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _triggerDelayedPaymentLoad();
+                          });
+                        }
+                        
                         return RefreshIndicator(
                           onRefresh: () async {
-                            context.read<BerandaBloc>().add(
-                              const RefreshBerandaDataEvent(),
-                            );
+                            debugPrint('🔥 RADICAL: Pull to refresh - triggering aggressive reload');
+                            try {
+                              context.read<BerandaBloc>().add(
+                                const RefreshBerandaDataEvent(),
+                              );
+                            } catch (e) {
+                              debugPrint('BerandaBloc not available for pull refresh: $e');
+                            }
+                            // STARTUP FIX: No longer first startup after pull refresh
+                            _isFirstStartup = false;
+                            // RADICAL SOLUTION: Aggressive refresh on pull-to-refresh
+                            await _triggerAggressivePaymentLoad('pullRefresh');
                             // Also refresh preferences when user pulls to refresh
                             await _loadPreferences();
                           },
@@ -332,7 +428,14 @@ class _BerandaPageState extends State<BerandaPage>
                           ),
                         );
                       }
-                      return const SizedBox.shrink();
+                      // STARTUP FIX: Show loading instead of blank during initial state
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF135EA2),
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -340,7 +443,6 @@ class _BerandaPageState extends State<BerandaPage>
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -701,52 +803,18 @@ class _BerandaPageState extends State<BerandaPage>
                   letterSpacing: -0.16,
                 ),
               ),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: _navigateToCustomization,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF135EA2).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFF135EA2)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.edit, size: 12, color: Color(0xFF135EA2)),
-                          SizedBox(width: 4),
-                          Text(
-                            'Ubah',
-                            style: TextStyle(
-                              color: Color(0xFF135EA2),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+              GestureDetector(
+                onTap: _navigateToPaymentPage,
+                child: const Text(
+                  "Lihat Detail",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF135EA2),
+                    letterSpacing: -0.14,
+                    decoration: TextDecoration.underline,
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _navigateToPaymentPage,
-                    child: const Text(
-                      "Lihat Detail",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF135EA2),
-                        letterSpacing: -0.14,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -758,30 +826,102 @@ class _BerandaPageState extends State<BerandaPage>
                 current is PaymentError ||
                 current is PaymentLoading,
             builder: (context, state) {
-              // Trigger load only if needed and not already loading
-              if (state is PaymentInitial) {
+              // STARTUP FIX: Only force payment loading if beranda data is loaded
+              if (state is PaymentInitial && mounted && _berandaDataLoaded && !_isFirstStartup) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  context.read<PaymentBloc>().add(
-                    const LoadPaymentSummaryEvent(),
-                  );
+                  debugPrint('🔥 RADICAL: PaymentInitial detected - triggering force refresh');
+                  _triggerAggressivePaymentLoad('paymentInitialState');
+                });
+              }
+              
+              // STARTUP FIX: Only retry if not in first startup sequence
+              if (state is PaymentError && _paymentLoadAttempts < maxPaymentLoadAttempts && mounted && !_isFirstStartup) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  debugPrint('🔥 RADICAL: PaymentError detected - attempt ${_paymentLoadAttempts + 1}');
+                  _triggerAggressivePaymentLoad('paymentErrorRetry');
                 });
               }
 
-              if (state is PaymentLoading) {
-                return const Center(
-                  child: SizedBox(
-                    height: 60,
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF135EA2),
+              if (state is PaymentLoading || _directApiLoading) {
+                return Column(
+                  children: [
+                    if (_paymentLoadAttempts > 1) ...[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Loading attempt $_paymentLoadAttempts...',
+                              style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const Center(
+                      child: SizedBox(
+                        height: 60,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF135EA2),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 );
               }
 
               if (state is PaymentSummaryLoaded) {
+                debugPrint('🔥 RADICAL: PaymentSummaryLoaded - resetting attempt counter');
+                _paymentLoadAttempts = 0; // Reset attempt counter on success
                 return _buildPaymentSummaryCards(state.summary);
+              }
+              
+              // RADICAL SOLUTION: Fallback to direct API data if available
+              if (_directApiPaymentSummary != null && (state is PaymentError || state is PaymentInitial)) {
+                debugPrint('🔥 RADICAL: Using direct API fallback data');
+                return Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange.shade600, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Loaded via fallback API',
+                              style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPaymentSummaryCards(_directApiPaymentSummary!),
+                  ],
+                );
               }
 
               if (state is PaymentError) {
@@ -792,9 +932,42 @@ class _BerandaPageState extends State<BerandaPage>
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red.shade200),
                   ),
-                  child: Text(
-                    'Error loading payment data: ${state.message}',
-                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Error loading payment data: ${state.message}',
+                              style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Attempt $_paymentLoadAttempts/$maxPaymentLoadAttempts',
+                            style: TextStyle(color: Colors.red.shade600, fontSize: 10),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => _triggerAggressivePaymentLoad('manualRetry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            ),
+                            child: const Text(
+                              'Force Retry',
+                              style: TextStyle(color: Colors.white, fontSize: 10),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 );
               }
@@ -1006,24 +1179,10 @@ class _BerandaPageState extends State<BerandaPage>
     ).push(MaterialPageRoute(builder: (context) => const SettingsPage()));
   }
 
-  /// Navigate to customization page and refresh preferences on return
-  Future<void> _navigateToCustomization() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const DashboardCustomizationPage()),
-    );
-
-    // If user made changes in customization, refresh preferences cache and payment data
-    if (result == true && mounted) {
-      await _loadPreferences(); // Refresh cached preferences
-      // Trigger payment summary reload to reflect new customizations
-      if (mounted) {
-        context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
-      }
-    }
-  }
 
   /// Navigate to payment page (wismon)
   Future<void> _navigateToPaymentPage() async {
+    debugPrint('🔧 BerandaPage: Navigating to wismon page...');
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const WismonPage()),
     );
@@ -1031,10 +1190,185 @@ class _BerandaPageState extends State<BerandaPage>
     // Refresh preferences and payment data when returning from payment page
     // This ensures any customizations made from wismon page are reflected
     if (mounted) {
+      debugPrint('🔧 BerandaPage: Returned from wismon page - refreshing data');
       await _loadPreferences();
+      // STARTUP FIX: No longer first startup after wismon page
+      _isFirstStartup = false;
+      // RADICAL SOLUTION: Aggressive refresh after returning from payment page
+      _triggerAggressivePaymentLoad('postWismonPage');
+    }
+  }
+  
+  /// RADICAL SOLUTION: Trigger aggressive payment loading with multiple strategies
+  Future<void> _triggerAggressivePaymentLoad(String source) async {
+    if (!mounted) return;
+    
+    debugPrint('🔥 RADICAL: Triggering aggressive payment load from: $source');
+    _paymentLoadAttempts++;
+    
+    // Strategy 1: Force PaymentBloc refresh
+    try {
+      final paymentBloc = context.read<PaymentBloc>();
+      paymentBloc.add(ForcePaymentRefreshEvent(
+        clearCache: true,
+        bypassCurrentState: true,
+        debugSource: source,
+      ));
+      debugPrint('🔥 RADICAL: PaymentBloc force refresh triggered');
+    } catch (e) {
+      debugPrint('🔥 RADICAL: PaymentBloc not available, trying direct API: $e');
+      // Strategy 2: Direct API fallback
+      _loadPaymentDataDirectly(source);
+    }
+    
+    // Strategy 3: Start polling if this is a critical load
+    if (source.contains('auth') || source.contains('init')) {
+      _startPaymentPolling(source);
+    }
+  }
+  
+  /// RADICAL SOLUTION: Direct API call bypassing BLoC
+  Future<void> _loadPaymentDataDirectly(String source) async {
+    if (!mounted) return;
+    
+    setState(() {
+      _directApiLoading = true;
+      _directApiError = null;
+    });
+    
+    try {
+      debugPrint('🔥 RADICAL: Loading payment data directly from API - source: $source');
+      
+      // Get auth token
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      if (token == null || token.isEmpty) {
+        throw Exception('No auth token available for direct API call');
+      }
+      
+      // Make direct API call
+      final apiService = di.sl<ApiService>();
+      final response = await apiService.get('/payments/summary');
+      
+      if (response['success'] == true) {
+        final summaryData = response['data'];
+        
+        // Convert response to PaymentSummary entity
+        final paymentSummary = PaymentSummary(
+          totalPembayaran: (summaryData['totalPembayaran'] ?? summaryData['totalAmount'] ?? 0.0).toDouble(),
+          breakdown: Map<String, double>.from(
+            summaryData['breakdown'] ?? {},
+          ),
+        );
+        
+        if (mounted) {
+          setState(() {
+            _directApiPaymentSummary = paymentSummary;
+            _directApiLoading = false;
+            _directApiError = null;
+          });
+          debugPrint('🔥 RADICAL: Direct API call successful - data loaded');
+        }
+      } else {
+        throw Exception(response['message'] ?? 'API call failed');
+      }
+    } catch (e) {
+      debugPrint('🔥 RADICAL: Direct API call failed: $e');
       if (mounted) {
-        context.read<PaymentBloc>().add(const LoadPaymentSummaryEvent());
+        setState(() {
+          _directApiLoading = false;
+          _directApiError = 'Direct API failed: ${e.toString()}';
+        });
       }
     }
+  }
+  
+  /// RADICAL SOLUTION: Start polling for payment data
+  void _startPaymentPolling(String source) {
+    _stopPaymentPolling(); // Stop any existing polling
+    
+    debugPrint('🔥 RADICAL: Starting payment polling from: $source');
+    
+    _paymentPollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      // Check if we already have data loaded
+      try {
+        final paymentBloc = context.read<PaymentBloc>();
+        final currentState = paymentBloc.state;
+        
+        if (currentState is PaymentSummaryLoaded) {
+          debugPrint('🔥 RADICAL: Payment polling successful - stopping timer');
+          timer.cancel();
+          return;
+        }
+        
+        debugPrint('🔥 RADICAL: Payment polling attempt...');
+        
+        // Try to load again
+        paymentBloc.add(const LoadPaymentSummaryEvent());
+      } catch (e) {
+        debugPrint('🔥 RADICAL: Payment polling bloc error: $e');
+        _loadPaymentDataDirectly('polling');
+      }
+      
+      // Stop polling after 10 attempts (50 seconds)
+      if (timer.tick >= 10) {
+        debugPrint('🔥 RADICAL: Payment polling timeout - stopping');
+        timer.cancel();
+      }
+    });
+  }
+  
+  /// RADICAL SOLUTION: Stop payment polling
+  void _stopPaymentPolling() {
+    _paymentPollingTimer?.cancel();
+    _paymentPollingTimer = null;
+  }
+  
+  /// STARTUP FIX: Coordinated startup sequence to prevent race conditions
+  void _startupSequence() {
+    if (!mounted) return;
+    
+    debugPrint('🔥 STARTUP: Starting coordinated startup sequence');
+    
+    // Step 1: Trigger beranda data load first (if not already loaded)
+    try {
+      final berandaBloc = context.read<BerandaBloc>();
+      final currentState = berandaBloc.state;
+      
+      if (currentState is! BerandaLoaded) {
+        debugPrint('🔥 STARTUP: Loading beranda data first');
+        berandaBloc.add(const FetchBerandaDataEvent());
+      } else {
+        // Beranda already loaded, mark as loaded and proceed
+        _berandaDataLoaded = true;
+        _triggerDelayedPaymentLoad();
+      }
+    } catch (e) {
+      debugPrint('🔥 STARTUP: BerandaBloc not available: $e');
+      // Fallback: proceed with payment loading anyway
+      _triggerDelayedPaymentLoad();
+    }
+  }
+  
+  /// STARTUP FIX: Delayed payment loading after beranda is ready
+  void _triggerDelayedPaymentLoad() {
+    if (!mounted) return;
+    
+    debugPrint('🔥 STARTUP: Triggering delayed payment load');
+    
+    // Add a small delay to ensure UI is rendered properly
+    _startupDelayTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      
+      debugPrint('🔥 STARTUP: Executing delayed payment load');
+      _isFirstStartup = false; // Mark startup as complete
+      _triggerAggressivePaymentLoad('startupSequence');
+    });
   }
 }

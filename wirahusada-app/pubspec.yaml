@@ -46,6 +46,10 @@ dependencies:
   # Shared preferences for token storage
   shared_preferences: ^2.2.2
 
+  # Hive for fast, reliable local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
   # Functional programming
   dartz: ^0.10.1
 
@@ -63,6 +67,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # Code generation for Hive type adapters
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.9
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
